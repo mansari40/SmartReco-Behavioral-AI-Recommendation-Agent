@@ -1,0 +1,37 @@
+# Core web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.19
+jinja2==3.1.4
+
+# Config & validation
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+email-validator==2.2.0
+
+# Database (async SQLAlchemy 2.0)
+sqlalchemy[asyncio]==2.0.36
+aiosqlite==0.20.0
+
+# Auth
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+python-jose[cryptography]==3.3.0
+
+# LLM access 
+openai==1.58.1
+
+# Agent framework + observability 
+langgraph==0.2.60
+langchain-core==0.3.28
+langsmith==0.2.10
+
+# Vector DB 
+chromadb==0.5.23
+
+# Scheduling 
+apscheduler==3.11.0
+
+# Utilities
+tenacity==9.0.0

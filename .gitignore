@@ -1,0 +1,20 @@
+# secrets
+.env
+*.env
+!.env.example
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# db / vector store artifacts
+*.db
+*.sqlite3
+chroma_data/
+
+# misc
+.DS_Store
+.pytest_cache/
+*.egg-info/
