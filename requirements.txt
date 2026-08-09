@@ -28,7 +28,7 @@ langchain-core==0.3.28
 langsmith==0.2.10
 
 # Vector DB 
-chromadb==0.5.23
+chromadb==0.5.4
 
 # Scheduling 
 apscheduler==3.11.0
