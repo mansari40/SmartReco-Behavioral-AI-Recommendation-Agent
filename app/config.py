@@ -1,5 +1,7 @@
 """
 Centralized app configuration, loaded from environment / .env via pydantic-settings.
+Everything else in the app imports `settings` from here rather than reading
+os.environ directly.
 """
 from functools import lru_cache
 
@@ -18,11 +20,11 @@ class Settings(BaseSettings):
     secret_key: str = "dev-only-insecure-key"
     access_token_expire_minutes: int = 60 * 24
 
-    # Mesh API — mandatory gateway for all LLM/embedding calls
-    mesh_api_key: str = ""
-    mesh_base_url: str = "https://api.meshapi.ai/v1"
-    mesh_chat_model: str = "openai/gpt-4o"
-    mesh_embedding_model: str = "openai/text-embedding-3-small"
+    # LLM gateway (OpenAI-compatible) — currently OpenRouter
+    llm_api_key: str = ""
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+    llm_chat_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    llm_embedding_model: str = "openai/text-embedding-3-small"
 
     # Vector store
     chroma_persist_dir: str = "./chroma_data"
@@ -32,6 +34,8 @@ class Settings(BaseSettings):
     langchain_tracing_v2: bool = False
     langchain_api_key: str = ""
     langchain_project: str = "smartreco-agent"
+
+    mock_embeddings: bool = False
 
 
 @lru_cache
