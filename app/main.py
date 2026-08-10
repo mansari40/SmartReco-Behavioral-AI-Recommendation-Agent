@@ -1,6 +1,6 @@
 """
-App entrypoint. Wires up routers, DB init, CORS, templates, and static
-files. More routers/page routes get added here as each stage is built.
+App entrypoint. Wires up routers, DB init, CORS, templates, static files,
+and the background scheduler.
 """
 from contextlib import asynccontextmanager
 
@@ -12,11 +12,15 @@ from fastapi.templating import Jinja2Templates
 from app.config import settings
 from app.db.base import init_db
 from app.routers import auth, events, pages, products, recommendations
+from app.services.scheduler import start_scheduler, stop_scheduler
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(title="SmartReco", version="0.1.0", lifespan=lifespan)
@@ -36,6 +40,7 @@ app.include_router(products.router)
 app.include_router(events.router)
 app.include_router(recommendations.router)
 app.include_router(pages.router)
+
 
 @app.get("/health")
 async def health():
