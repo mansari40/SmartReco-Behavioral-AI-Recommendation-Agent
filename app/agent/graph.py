@@ -19,24 +19,12 @@ from app.agent.nodes.retrieve import retrieve_node
 from app.agent.nodes.evaluate import evaluate_node
 from app.agent.nodes.filter import filter_node
 from app.agent.nodes.generate import generate_node
+from app.agent.nodes.reflect import reflect_node
+from app.agent.nodes.store import store_node
 
 MAX_REGENERATIONS = 2
 
 
-
-async def reflect_node(state: AgentState) -> dict:
-    """STUB: will critique the generated narrative and decide whether to
-    regenerate. For now, always accepts on first try to prove the graph
-    runs end to end; real self-critique logic comes later."""
-    print("[reflect] running")
-    count = state.get("regenerate_count", 0)
-    return {"should_regenerate": False, "reflection_feedback": "", "regenerate_count": count}
-
-
-async def store_node(state: AgentState) -> dict:
-    """STUB: will persist the Recommendation row. Just logs for now."""
-    print(f"[store] would save recommendation: {state['narrative']}")
-    return {}
 
 
 def _should_loop_or_finish(state: AgentState) -> str:
