@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Catalog — SmartReco{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 1.5rem;">Course Catalog</h1>
+
+{% if products %}
+    <div style="display: grid; gap: 1rem;">
+        {% for product in products %}
+        <div class="card product-card" data-product-id="{{ product.id }}">
+            <h3 style="margin-bottom: 0.4rem;">
+                <a href="/products/{{ product.id }}" style="color: #1a1a1a; text-decoration: none;">
+                    {{ product.title }}
+                </a>
+            </h3>
+            <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.6rem;">{{ product.category }}</p>
+            <p style="margin-bottom: 0.8rem;">{{ product.description }}</p>
+            <strong>${{ "%.2f"|format(product.price) }}</strong>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <p>No products yet. Check back soon.</p>
+{% endif %}
+
+<script src="/static/js/tracker.js"></script>
+{% endblock %}

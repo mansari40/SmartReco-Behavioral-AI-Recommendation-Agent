@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}For You — SmartReco{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 1.5rem;">Recommended For You</h1>
+
+<div id="rec-container">
+    <p id="loading-msg">Loading your recommendation...</p>
+</div>
+
+<script>
+(async function () {
+    const container = document.getElementById('rec-container');
+    const token = localStorage.getItem('access_token');
+
+    if (!token) {
+        container.innerHTML = '<p>Please <a href="/login">log in</a> to see your recommendations.</p>';
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/recommendations/me', {
+            headers: { 'Authorization': 'Bearer ' + token },
+        });
+
+        if (!res.ok) {
+            container.innerHTML = '<p>Something went wrong loading your recommendation.</p>';
+            return;
+        }
+
+        const rec = await res.json();
+
+        if (!rec) {
+            container.innerHTML = '<p>We\'re still learning what you\'re interested in — browse the ' +
+                '<a href="/">catalog</a> for a bit, and check back here soon.</p>';
+            return;
+        }
+
+        let html = '<div class="card">';
+        html += '<p style="margin-bottom: 1rem;">' + rec.narrative + '</p>';
+        html += '<div style="font-size: 0.85rem; color: #666; margin-bottom: 1rem;">';
+        html += 'Strategy: ' + rec.persuasion_strategy + ' &middot; Confidence: ' + Math.round(rec.confidence * 100) + '%';
+        html += '</div>';
+        html += '</div>';
+
+        html += '<h3 style="margin: 1.5rem 0 0.8rem;">Recommended Courses</h3>';
+        rec.products.forEach(function (p) {
+            html += '<div class="card">';
+            html += '<p>' + p.reason + '</p>';
+            html += '</div>';
+        });
+
+        html += '<details style="margin-top: 1.5rem;">';
+        html += '<summary style="cursor: pointer; color: #4f46e5;">Why am I seeing this?</summary>';
+        html += '<div class="card" style="margin-top: 0.8rem;"><ul style="padding-left: 1.2rem;">';
+        rec.reasoning_chain.forEach(function (step) {
+            html += '<li style="margin-bottom: 0.4rem;">' + step + '</li>';
+        });
+        html += '</ul></div>';
+        html += '</details>';
+
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p>Something went wrong loading your recommendation.</p>';
+    }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SmartReco{% endblock %}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f7f7f8;
+            color: #1a1a1a;
+            line-height: 1.5;
+        }
+        nav {
+            background: #1a1a2e;
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        nav a { color: white; text-decoration: none; margin-left: 1.5rem; font-size: 0.95rem; }
+        nav a:hover { text-decoration: underline; }
+        .brand { font-weight: 700; font-size: 1.1rem; }
+        main { max-width: 1000px; margin: 2rem auto; padding: 0 1.5rem; }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            margin-bottom: 1rem;
+        }
+        .btn {
+            display: inline-block;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            text-decoration: none;
+        }
+        .btn:hover { background: #4338ca; }
+        input, textarea {
+            width: 100%;
+            padding: 0.6rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 0.8rem;
+            font-size: 0.95rem;
+        }
+        .error { color: #dc2626; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <nav>
+        <span class="brand">SmartReco</span>
+        <div>
+            <a href="/">Catalog</a>
+            <a href="/recommendations">For You</a>
+            <a href="#" id="nav-auth-link">Login</a>
+        </div>
+    </nav>
+
+    <script>
+    (function() {
+        const link = document.getElementById('nav-auth-link');
+        const token = localStorage.getItem('access_token');
+        if (token) {
+            link.textContent = 'Logout';
+            link.href = '#';
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+            });
+        } else {
+            link.href = '/login';
+        }
+    })();
+    </script>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
