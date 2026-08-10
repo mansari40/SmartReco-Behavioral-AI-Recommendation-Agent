@@ -3,7 +3,9 @@ generate node: selects a persuasion strategy deterministically from the
 cognitive model (not an LLM guess — this is what makes the "why this
 strategy" claim in the transparency panel actually true), then asks the
 LLM to write the persuasive narrative using that strategy and addressing
-the user's detected objections directly.
+the user's detected objections directly. If a previous attempt was
+rejected by the reflect node, incorporates that feedback so the retry
+doesn't blindly repeat the same mistake.
 """
 import json
 
@@ -119,12 +121,19 @@ async def generate_node(state: AgentState) -> dict:
         for c in filtered_candidates
     )
 
+    feedback_note = ""
+    if state.get("reflection_feedback"):
+        feedback_note = (
+            f"\n\nIMPORTANT: A previous attempt at this message was reviewed and rejected. "
+            f"Fix this specific issue: {state['reflection_feedback']}"
+        )
+
     prompt = SYSTEM_PROMPT_TEMPLATE.format(
         profile=json.dumps(cognitive_model, indent=2),
         strategy_name=strategy_name,
         strategy_instruction=strategy_instruction,
         products=products_text,
-    )
+    ) + feedback_note
 
     raw_reply = await llm_client.chat_completion(
         messages=[{"role": "user", "content": prompt}],
