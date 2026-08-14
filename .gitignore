@@ -20,4 +20,6 @@ chroma_data/
 *.egg-info/
 
 
-scr
+scrnode_modules/
+.opencode/
+node_modules/
