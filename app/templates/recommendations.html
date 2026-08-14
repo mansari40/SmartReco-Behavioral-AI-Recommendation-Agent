@@ -1,68 +1,333 @@
 {% extends "base.html" %}
 
-{% block title %}For You — SmartReco{% endblock %}
+{% block title %}For You — UPulse{% endblock %}
+{% block main_class %}wide rec-page{% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom: 1.5rem;">Recommended For You</h1>
+<div class="rec-hero reveal" id="rec-hero">
+    <span class="eyebrow">Your next step</span>
+    <h1 id="rec-headline">We're reading your signals.</h1>
+    <div class="rec-meta" id="rec-meta" style="display: none;">
+        <span class="mono" id="rec-strategy"></span>
+        <span class="mono" id="rec-confidence"></span>
+    </div>
+    <div class="rec-chips" id="rec-chips" style="display: none;"></div>
+</div>
 
 <div id="rec-container">
-    <p id="loading-msg">Loading your recommendation...</p>
+    <div class="rec-loading">
+        <div class="skeleton skeleton-hero"></div>
+        <div class="skeleton-grid">
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+        </div>
+    </div>
+</div>
+
+<div style="margin-top: 2.5rem; max-width: 420px;" class="reveal">
+    <div class="signal-block" id="signal-block">
+        <div class="signal-header"><span class="signal-title">Your Signal</span></div>
+        <div class="signal-rows"><p class="signal-empty">Loading...</p></div>
+    </div>
 </div>
 
 <script>
-(async function () {
+(function () {
     const container = document.getElementById('rec-container');
+    const headline = document.getElementById('rec-headline');
+    const metaRow = document.getElementById('rec-meta');
+    if (!container) return;
     const token = localStorage.getItem('access_token');
+    const POLL_INTERVAL_MS = 5000;
 
-    if (!token) {
-        container.innerHTML = '<p>Please <a href="/login">log in</a> to see your recommendations.</p>';
-        return;
+    let currentRecId = null;
+    let currentIsEmpty = null;
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 
-    try {
+    function coverIndex(category) {
+        let sum = 0;
+        for (let i = 0; i < category.length; i++) sum += category.charCodeAt(i);
+        return sum % 6;
+    }
+
+    function glyphFor(category) {
+        if (window.UPulseGlyphs) return window.UPulseGlyphs.for(category);
+        return '';
+    }
+
+    function renderEmptyState() {
+        return '<div class="rec-empty reveal">' +
+            '<h3>Still learning your interests</h3>' +
+            '<p>Browse the <a href="/">catalog</a> for a bit — search for topics and open a few courses. ' +
+            'As soon as your activity shows a pattern, your next step appears here automatically.</p>' +
+            '<a class="btn" href="/">Explore the catalog</a>' +
+            '</div>';
+    }
+
+    function renderExplanation(lines) {
+        const items = (lines || []).map(function (line) {
+            return '<li>' + escapeHtml(line) + '</li>';
+        }).join('');
+        return '<ul class="rec-explain reveal">' + items + '</ul>';
+    }
+
+    function renderProducts(products) {
+        const maxScore = Math.max.apply(null, products.map(function (p) { return Number(p.score) || 0; }));
+        const hasScores = maxScore > 0.05;
+        return '<div class="rec-section-head"><div><span class="eyebrow">Matched to your activity</span><h2>Recommended courses</h2></div>' +
+            '<span class="hint">Each one is the closest fit in the catalog</span></div>' +
+            '<div class="rec-grid">' +
+            products.map(function (p, i) {
+                const matchPct = hasScores ? Math.max(5, Math.round((Number(p.score) || 0) / maxScore * 97)) : 0;
+                const badge = hasScores
+                    ? '<span class="match-badge"><svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>' + matchPct + '% match</span>'
+                    : '';
+                return '<a href="/products/' + encodeURIComponent(p.product_id) + '" class="rec-card reveal" data-reveal-delay="' + (i * 90) + '">' +
+                    '<div class="rec-cover cover cover-' + coverIndex(p.category || '') + '">' +
+                    badge +
+                    '<span class="cover-badge">' + escapeHtml(p.level || 'Intermediate') + '</span>' +
+                    '<span class="cover-glyph">' + glyphFor(p.category) + '</span>' +
+                    '</div>' +
+                    '<div class="rec-body">' +
+                    '<span class="rec-category">' + escapeHtml(p.category || '') + '</span>' +
+                    '<h3>' + escapeHtml(p.title) + '</h3>' +
+                    '<div class="card-stars">' + starsHtml(p.rating) + '</div>' +
+                    '<p class="rec-reason"><span class="rec-reason-label">Why this</span>' + escapeHtml(p.reason) + '</p>' +
+                    '<div class="rec-foot">' +
+                    '<span class="rec-price">$' + Number(p.price).toFixed(2) + '</span>' +
+                    '<span class="btn">View course</span>' +
+                    '</div>' +
+                    '</div></a>';
+            }).join('') +
+            '</div>';
+    }
+
+    function starsHtml(rating) {
+        const r = Number(rating || 0);
+        const track = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>';
+        const fill = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>';
+        return '<span class="stars" aria-label="Rated ' + r.toFixed(1) + ' out of 5">' +
+            '<span class="stars-track">' + track.repeat(5) + '</span>' +
+            '<span class="stars-fill" style="width:' + (r / 5 * 100) + '%">' + fill.repeat(5) + '</span>' +
+            '</span>' +
+            '<span class="stars-value">' + r.toFixed(1) + '</span>';
+    }
+
+    function feedbackButton(value, active, label) {
+        const activeClass = value === 'up' ? 'active-up' : 'active-down';
+        const icon = value === 'up'
+            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>'
+            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"/></svg>';
+        return '<button class="feedback-btn ' + (active ? activeClass : '') + '" data-value="' + value + '" aria-pressed="' + (active ? 'true' : 'false') + '" aria-label="' + (value === 'up' ? 'This is useful' : 'Not useful') + '">' +
+            icon + '<span class="fb-label">' + label + '</span></button>';
+    }
+
+    function renderDetails(rec) {
+        const strategyLabel = {
+            scarcity_urgency: 'Urgency framing',
+            social_proof: 'Social proof',
+            authority_credibility: 'Depth & credibility',
+            objection_handling: 'Objection handling',
+            curiosity_framing: 'Curiosity framing',
+            none: 'Not enough signal yet',
+        }[rec.persuasion_strategy] || rec.persuasion_strategy;
+
+        return '<details class="rec-details reveal"><summary>How this was built</summary>' +
+            '<div class="rec-details-body">' +
+            '<div class="stat"><h4>Trigger</h4><p>' + escapeHtml(rec.trigger_reason) + '</p></div>' +
+            '<div class="stat"><h4>Approach</h4><p>' + escapeHtml(strategyLabel) + '</p></div>' +
+            '<div class="stat"><h4>Confidence</h4><p>' + Math.round(rec.confidence * 100) + '% match confidence</p></div>' +
+            '</div></details>';
+    }
+
+    async function submitFeedback(recId, value) {
+        try {
+            await fetch('/api/recommendations/' + recId + '/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ feedback: value }),
+            });
+            const rec = await fetchRecommendation();
+            if (rec !== undefined) render(rec);
+        } catch (err) {}
+    }
+
+    async function fetchRecommendation() {
         const res = await fetch('/api/recommendations/me', {
             headers: { 'Authorization': 'Bearer ' + token },
         });
+        if (!res.ok) return undefined;
+        return res.json();
+    }
 
-        if (!res.ok) {
-            container.innerHTML = '<p>Something went wrong loading your recommendation.</p>';
+    function animateIn() {
+        document.querySelectorAll('.reveal').forEach(function (el) {
+            if (el.dataset.animated) return;
+            el.dataset.animated = '1';
+            const delay = Number(el.dataset.revealDelay || 0);
+            el.classList.add('revealed');
+            if (window.Motion && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                el.style.opacity = 0;
+                window.Motion.animate(el, { opacity: 1, y: 0 }, { duration: 0.4, delay: delay / 1000, easing: 'ease-out' })
+                    .then(function () { el.classList.add('revealed'); });
+            }
+        });
+    }
+
+    let typewriterTimer = null;
+    let typewriterEl = null;
+
+    function typewrite(el, text) {
+        if (typewriterTimer) clearInterval(typewriterTimer);
+        if (typewriterEl) typewriterEl.classList.remove('typing');
+
+        el.textContent = '';
+        el.classList.add('typing');
+
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            el.textContent = text;
+            el.classList.remove('typing');
             return;
         }
 
-        const rec = await res.json();
+        let i = 0;
+        typewriterEl = el;
+        typewriterTimer = setInterval(function () {
+            i += 1;
+            el.textContent = text.slice(0, i);
+            if (i >= text.length) {
+                clearInterval(typewriterTimer);
+                typewriterTimer = null;
+                el.classList.remove('typing');
+            }
+        }, 14);
+    }
 
-        if (!rec) {
-            container.innerHTML = '<p>We\'re still learning what you\'re interested in — browse the ' +
-                '<a href="/">catalog</a> for a bit, and check back here soon.</p>';
+    function renderChips(rec) {
+        const chipsEl = document.getElementById('rec-chips');
+        if (!chipsEl) return;
+        const strategyLabel = {
+            scarcity_urgency: 'Urgency framing',
+            social_proof: 'Social proof',
+            authority_credibility: 'Depth & credibility',
+            objection_handling: 'Objection handling',
+            curiosity_framing: 'Curiosity framing',
+            none: 'Not enough signal yet',
+        }[rec.persuasion_strategy] || rec.persuasion_strategy;
+
+        chipsEl.innerHTML =
+            '<span class="rec-chip rec-chip-accent"><span class="chip-dot"></span>Trigger: <b>' + escapeHtml(rec.trigger_reason) + '</b></span>' +
+            '<span class="rec-chip">Approach: <b>' + escapeHtml(strategyLabel) + '</b></span>' +
+            '<span class="rec-chip">Confidence: <b>' + Math.round(rec.confidence * 100) + '%</b></span>';
+        chipsEl.style.display = 'flex';
+    }
+
+    function render(rec) {
+        const isEmpty = !rec || rec.persuasion_strategy === 'none';
+
+        if (isEmpty) {
+            if (currentIsEmpty === true) return;
+            container.innerHTML = renderEmptyState();
+            if (headline) headline.textContent = "We're still reading your signals";
+            if (metaRow) metaRow.style.display = 'none';
+            const chipsEl = document.getElementById('rec-chips');
+            if (chipsEl) chipsEl.style.display = 'none';
+            currentIsEmpty = true;
+            currentRecId = null;
+            animateIn();
             return;
         }
 
-        let html = '<div class="card">';
-        html += '<p style="margin-bottom: 1rem;">' + rec.narrative + '</p>';
-        html += '<div style="font-size: 0.85rem; color: #666; margin-bottom: 1rem;">';
-        html += 'Strategy: ' + rec.persuasion_strategy + ' &middot; Confidence: ' + Math.round(rec.confidence * 100) + '%';
-        html += '</div>';
-        html += '</div>';
+        if (rec.id === currentRecId) return;
+        currentRecId = rec.id;
+        currentIsEmpty = false;
 
-        html += '<h3 style="margin: 1.5rem 0 0.8rem;">Recommended Courses</h3>';
-        rec.products.forEach(function (p) {
-            html += '<div class="card">';
-            html += '<p>' + p.reason + '</p>';
-            html += '</div>';
-        });
+        typewrite(headline, rec.narrative);
+        if (metaRow) metaRow.style.display = 'flex';
+        const strategyEl = document.getElementById('rec-strategy');
+        if (strategyEl) strategyEl.textContent = '';
+        const confidenceEl = document.getElementById('rec-confidence');
+        if (confidenceEl) confidenceEl.textContent = Math.round(rec.confidence * 100) + '% match confidence';
 
-        html += '<details style="margin-top: 1.5rem;">';
-        html += '<summary style="cursor: pointer; color: #4f46e5;">Why am I seeing this?</summary>';
-        html += '<div class="card" style="margin-top: 0.8rem;"><ul style="padding-left: 1.2rem;">';
-        rec.reasoning_chain.forEach(function (step) {
-            html += '<li style="margin-bottom: 0.4rem;">' + step + '</li>';
-        });
-        html += '</ul></div>';
-        html += '</details>';
+        renderChips(rec);
+
+        let html = renderExplanation(rec.behavior_explanation);
+        html += renderProducts(rec.products || []);
+        html += '<div class="rec-actions reveal">' +
+            '<span class="muted" style="font-size: 0.86rem;">Was this useful?</span>' +
+            feedbackButton('up', rec.feedback === 'up', 'Useful') +
+            feedbackButton('down', rec.feedback === 'down', 'Not for me') +
+            '</div>';
+        html += renderDetails(rec);
 
         container.innerHTML = html;
-    } catch (err) {
-        container.innerHTML = '<p>Something went wrong loading your recommendation.</p>';
+        animateIn();
+
+        container.querySelectorAll('.feedback-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                submitFeedback(rec.id, btn.dataset.value);
+            });
+        });
+    }
+
+    async function poll() {
+        const rec = await fetchRecommendation();
+        if (rec !== undefined) render(rec);
+    }
+
+    if (!token) {
+        headline.textContent = 'Sign in for your next step';
+        container.innerHTML = '<div class="rec-empty reveal"><h3>Recommendations are personal</h3>' +
+            '<p>Log in so your next step is built from what you actually explore.</p>' +
+            '<a class="btn" href="/login">Log in</a></div>';
+        animateIn();
+    } else {
+        animateIn();
+        poll();
+        setInterval(poll, POLL_INTERVAL_MS);
+    }
+})();
+</script>
+<script src="/static/js/tracker.js"></script>
+<script>
+(function () {
+    const container = document.getElementById('signal-block');
+    const token = localStorage.getItem('access_token');
+    const POLL_MS = 4000;
+    let debounceHandle = null;
+
+    async function fetchRecent() {
+        if (!token) return [];
+        try {
+            const res = await fetch('/api/events/recent', { headers: { 'Authorization': 'Bearer ' + token } });
+            return res.ok ? res.json() : [];
+        } catch (err) { return []; }
+    }
+
+    async function poll() {
+        const events = await fetchRecent();
+        window.UPulseTracker.renderSignal(container, events, { title: 'Your Signal' });
+    }
+
+    if (window.UPulseTracker) {
+        window.UPulseTracker.onEvent = function () {
+            clearTimeout(debounceHandle);
+            debounceHandle = setTimeout(poll, 400);
+        };
+    }
+
+    if (token) {
+        poll();
+        setInterval(poll, POLL_MS);
+    } else {
+        container.querySelector('.signal-rows').innerHTML =
+            '<p class="signal-empty">Log in to see your live signal.</p>';
     }
 })();
 </script>

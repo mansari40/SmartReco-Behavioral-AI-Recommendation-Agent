@@ -1,20 +1,35 @@
 {% extends "base.html" %}
 
-{% block title %}Login — SmartReco{% endblock %}
+{% block title %}Sign in — UPulse{% endblock %}
+{% block main_class %}wide{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 400px; margin: 2rem auto;">
-    <h2 style="margin-bottom: 1rem;">Log in</h2>
-    <div id="error" class="error" style="display: none;"></div>
-    <form id="login-form">
-        <input type="email" id="email" placeholder="Email" required>
-        <input type="password" id="password" placeholder="Password" required>
-        <button type="submit" class="btn" style="width: 100%;">Log in</button>
-    </form>
+<div class="auth-split">
+    <div class="auth-copy">
+        <span class="eyebrow">Welcome back</span>
+        <h1>Pick up where your browsing <span class="accent-italic">left off.</span></h1>
+        <p class="lede">Your behavioral profile and latest recommendation are waiting — sign back in to see them.</p>
+    </div>
+
+    <div class="auth-card">
+        <span class="eyebrow">Member access</span>
+        <h2>Sign in to UPulse</h2>
+        <div id="error" class="error" style="display: none;"></div>
+        <form id="login-form">
+            <label for="email">Email address</label>
+            <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+            <label for="password">Password</label>
+            <input type="password" id="password" placeholder="Your password" required autocomplete="current-password">
+            <button type="submit" class="btn" style="width: 100%;">Sign in &rarr;</button>
+        </form>
+            <p class="auth-footer"><a href="/password-reset">Forgot password?</a></p>
+        <p class="auth-footer">New here? <a href="/register">Create an account</a></p>
+    </div>
 </div>
 
 <script>
-document.getElementById('login-form').addEventListener('submit', async (e) => {
+const loginForm = document.getElementById('login-form');
+if (loginForm) loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const errorEl = document.getElementById('error');
     errorEl.style.display = 'none';
@@ -35,13 +50,25 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 
         if (!res.ok) {
             const data = await res.json();
-            errorEl.textContent = data.detail || 'Login failed.';
+            errorEl.textContent = data.detail || 'Incorrect email or password.';
             errorEl.style.display = 'block';
             return;
         }
 
         const data = await res.json();
         localStorage.setItem('access_token', data.access_token);
+        document.cookie = 'upulse_token=' + encodeURIComponent(data.access_token) + '; path=/; max-age=86400; samesite=lax';
+
+        const meRes = await fetch('/api/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + data.access_token },
+        });
+        if (meRes.ok) {
+            const me = await meRes.json();
+            localStorage.setItem('user_role', me.role);
+            localStorage.setItem('smartreco_user_id', me.id);
+            localStorage.setItem('upulse_user_id', me.id);
+        }
+
         window.location.href = '/';
     } catch (err) {
         errorEl.textContent = 'Something went wrong. Try again.';

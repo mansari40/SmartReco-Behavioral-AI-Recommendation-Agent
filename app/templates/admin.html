@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Admin — SmartReco{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <span class="eyebrow">Catalog Management</span>
+    <h1 style="font-size: 2rem;">Admin Console</h1>
+</div>
+
+<div id="admin-container">
+    <p class="muted">Checking access...</p>
+</div>
+
+<script>
+(function () {
+    const container = document.getElementById('admin-container');
+    if (!container) return;
+    const token = localStorage.getItem('access_token');
+    const role = localStorage.getItem('user_role');
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function syncChips(p) {
+        const status = p.sync_status;
+        const cls = status === 'synced' ? 'ok' : (status === 'pending' ? 'pending' : 'fail');
+        const label = status === 'synced' ? 'Synced' : (status === 'pending' ? 'Pending' : 'Failed');
+        const check = status === 'synced'
+            ? '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+            : '<span aria-hidden="true">&middot;</span>';
+        return '<span class="sync-chip ok">SQL ' + check + ' Synced</span> ' +
+            '<span class="sync-chip ' + cls + '">Vector ' + check + ' ' + label + '</span>';
+    }
+
+    function authHeaders(extra) {
+        return Object.assign({ 'Authorization': 'Bearer ' + token }, extra || {});
+    }
+
+    async function fetchProducts() {
+        const res = await fetch('/api/products');
+        return res.ok ? res.json() : [];
+    }
+
+    async function createProduct(data) {
+        const res = await fetch('/api/products', {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(data),
+        });
+        return res.ok;
+    }
+
+    async function updateProduct(id, data) {
+        const res = await fetch('/api/products/' + id, {
+            method: 'PATCH',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(data),
+        });
+        return res.ok;
+    }
+
+    async function deleteProduct(id) {
+        const res = await fetch('/api/products/' + id, {
+            method: 'DELETE',
+            headers: authHeaders(),
+        });
+        return res.ok;
+    }
+
+    function renderRow(p) {
+        return '<div class="card" data-row-id="' + p.id + '">' +
+            '<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">' +
+            '<div style="flex: 1;">' +
+            '<span class="eyebrow">' + escapeHtml(p.category) + '</span>' +
+            '<h3 style="font-size: 1.05rem; margin-bottom: 0.4rem;">' + escapeHtml(p.title) + '</h3>' +
+            '<p class="muted" style="font-size: 0.88rem; margin-bottom: 0.6rem;">' + escapeHtml(p.description) + '</p>' +
+            '<span class="price">$' + p.price.toFixed(2) + '</span>' +
+            '<div style="display: flex; gap: 0.4rem; margin-top: 0.7rem;">' + syncChips(p) + '</div>' +
+            '</div>' +
+            '<div style="display: flex; gap: 0.5rem; flex-shrink: 0;">' +
+            '<button class="btn edit-btn" data-id="' + p.id + '" style="background: var(--surface-hover); color: var(--ink); padding: 0.4rem 0.8rem; font-size: 0.85rem;">Edit</button>' +
+            '<button class="btn delete-btn" data-id="' + p.id + '" style="background: var(--danger); color: var(--ink); padding: 0.4rem 0.8rem; font-size: 0.85rem;">Delete</button>' +
+            '</div></div></div>';
+    }
+
+    function renderEditForm(p) {
+        return '<div class="card" data-row-id="' + p.id + '">' +
+            '<input type="text" class="edit-title" value="' + escapeHtml(p.title) + '" placeholder="Title">' +
+            '<input type="text" class="edit-category" value="' + escapeHtml(p.category) + '" placeholder="Category">' +
+            '<textarea class="edit-description" rows="2" placeholder="Description">' + escapeHtml(p.description) + '</textarea>' +
+            '<input type="number" step="0.01" class="edit-price" value="' + p.price + '" placeholder="Price">' +
+            '<div style="display: flex; gap: 0.5rem;">' +
+            '<button class="btn save-btn" data-id="' + p.id + '">Save</button>' +
+            '<button class="btn cancel-btn" style="background: var(--surface-hover); color: var(--ink);">Cancel</button>' +
+            '</div></div>';
+    }
+
+    async function renderAll() {
+        const products = await fetchProducts();
+        const list = document.getElementById('product-list');
+        list.innerHTML = products.map(renderRow).join('') || '<p class="muted">No products yet — add one above.</p>';
+        if (window.Motion && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            list.querySelectorAll('.card[data-row-id]').forEach(function (el, i) {
+                window.Motion.animate(el, { opacity: [0, 1], y: [10, 0] }, { duration: 0.28, delay: i * 0.03, easing: 'ease-out' });
+            });
+        }
+        attachRowHandlers();
+    }
+
+    function attachRowHandlers() {
+        document.querySelectorAll('.edit-btn').forEach(function (btn) {
+            btn.addEventListener('click', async function () {
+                const row = btn.closest('[data-row-id]');
+                const products = await fetchProducts();
+                const p = products.find(function (x) { return x.id === btn.dataset.id; });
+                if (p) row.outerHTML = renderEditForm(p);
+                attachRowHandlers();
+            });
+        });
+
+        document.querySelectorAll('.cancel-btn').forEach(function (btn) {
+            btn.addEventListener('click', renderAll);
+        });
+
+        document.querySelectorAll('.save-btn').forEach(function (btn) {
+            btn.addEventListener('click', async function () {
+                const row = btn.closest('[data-row-id]');
+                const ok = await updateProduct(btn.dataset.id, {
+                    title: row.querySelector('.edit-title').value,
+                    category: row.querySelector('.edit-category').value,
+                    description: row.querySelector('.edit-description').value,
+                    price: parseFloat(row.querySelector('.edit-price').value),
+                });
+                if (ok) renderAll();
+            });
+        });
+
+        document.querySelectorAll('.delete-btn').forEach(function (btn) {
+            btn.addEventListener('click', async function () {
+                if (!confirm('Delete this product? This removes it from both the database and the vector store.')) return;
+                const ok = await deleteProduct(btn.dataset.id);
+                if (ok) renderAll();
+            });
+        });
+    }
+
+    function buildUI() {
+        container.innerHTML =
+            '<div class="card">' +
+            '<h3 style="font-size: 1rem; margin-bottom: 1rem;">Add a product</h3>' +
+            '<input type="text" id="new-title" placeholder="Title">' +
+            '<input type="text" id="new-category" placeholder="Category">' +
+            '<textarea id="new-description" rows="2" placeholder="Description"></textarea>' +
+            '<input type="number" step="0.01" id="new-price" placeholder="Price">' +
+            '<button class="btn" id="create-btn">Create product</button>' +
+            '<p id="create-error" class="error" style="display: none; margin-top: 0.6rem;"></p>' +
+            '</div>' +
+            '<h3 style="font-size: 1rem; margin: 2rem 0 1rem; color: var(--fog); text-transform: uppercase; letter-spacing: 0.04em; font-family: var(--font-mono);">Catalog</h3>' +
+            '<div id="product-list"></div>';
+
+        document.getElementById('create-btn').addEventListener('click', async function () {
+            const errorEl = document.getElementById('create-error');
+            errorEl.style.display = 'none';
+
+            const data = {
+                title: document.getElementById('new-title').value,
+                category: document.getElementById('new-category').value,
+                description: document.getElementById('new-description').value,
+                price: parseFloat(document.getElementById('new-price').value),
+            };
+
+            if (!data.title || !data.category || !data.description || isNaN(data.price)) {
+                errorEl.textContent = 'Fill in all fields with a valid price.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            const ok = await createProduct(data);
+            if (ok) {
+                document.getElementById('new-title').value = '';
+                document.getElementById('new-category').value = '';
+                document.getElementById('new-description').value = '';
+                document.getElementById('new-price').value = '';
+                renderAll();
+            } else {
+                errorEl.textContent = 'Failed to create product.';
+                errorEl.style.display = 'block';
+            }
+        });
+
+        renderAll();
+    }
+
+    if (!token || role !== 'admin') {
+        container.innerHTML = '<div class="card"><p class="muted">Admin access required. ' +
+            (token ? 'Your account isn\'t an admin.' : 'Please <a href="/login">log in</a> as an admin.') + '</p></div>';
+    } else {
+        buildUI();
+    }
+})();
+</script>
+{% endblock %}

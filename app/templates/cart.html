@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Your Cart — UPulse{% endblock %}
+{% block main_class %}wide{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <span class="eyebrow">Ready when you are</span>
+    <h1 style="font-size: 2rem;">Your cart</h1>
+</div>
+
+<div id="cart-container">
+    <div class="rec-loading">
+        <div class="skeleton skeleton-hero" style="height: 90px;"></div>
+        <div class="skeleton skeleton-card"></div>
+    </div>
+</div>
+
+<script src="/static/js/tracker.js"></script>
+<script>
+(function () {
+    const container = document.getElementById('cart-container');
+    if (!container) return;
+    const token = localStorage.getItem('access_token');
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function coverIndex(category) {
+        let sum = 0;
+        for (let i = 0; i < category.length; i++) sum += category.charCodeAt(i);
+        return sum % 6;
+    }
+
+    function glyphFor(category) {
+        if (window.UPulseGlyphs) return window.UPulseGlyphs.for(category);
+        return '';
+    }
+
+    function levelBadge(level) {
+        return '<span class="level-badge level-' + (level || 'Intermediate').toLowerCase() + '">' +
+            escapeHtml(level || 'Intermediate') + '</span>';
+    }
+
+    function starsHtml(rating) {
+        const r = Number(rating || 0);
+        return '<span class="stars" aria-label="Rated ' + r.toFixed(1) + ' out of 5">' +
+            '<span class="stars-track">' +
+            '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>'.repeat(5) +
+            '</span>' +
+            '<span class="stars-fill" style="width:' + (r / 5 * 100) + '%">' +
+            '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>'.repeat(5) +
+            '</span>' +
+            '</span>';
+    }
+
+    function reveal(el) {
+        if (!el) return;
+        if (window.Motion && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            window.Motion.animate(el, { opacity: [0, 1], y: [10, 0] }, { duration: 0.3, easing: 'ease-out' });
+        } else {
+            el.classList.add('revealed');
+        }
+    }
+
+    function renderEmpty() {
+        container.innerHTML = '<div class="rec-empty reveal">' +
+            '<h3>Your cart is empty</h3>' +
+            '<p>Courses you add will show up here with a total, ready for checkout.</p>' +
+            '<a class="btn" href="/">Explore the catalog</a>' +
+            '</div>';
+        reveal(container.firstElementChild);
+    }
+
+    function renderCart(products) {
+        const total = products.reduce(function (sum, p) { return sum + p.price; }, 0);
+
+        let rows = products.map(function (p, i) {
+            return '<div class="cart-row reveal" data-product-id="' + p.id + '">' +
+                '<a href="/products/' + encodeURIComponent(p.id) + '" class="cart-cover cover cover-' + coverIndex(p.category) + '">' +
+                '<span class="cover-badge">' + escapeHtml((p.level || 'Intermediate')) + '</span>' +
+                '<span class="cover-glyph" style="width: 32px; height: 32px;">' + glyphFor(p.category) + '</span>' +
+                '</a>' +
+                '<div class="cart-info">' +
+                '<span class="cart-category">' + escapeHtml(p.category) + '</span>' +
+                '<a href="/products/' + encodeURIComponent(p.id) + '"><h3>' + escapeHtml(p.title) + '</h3></a>' +
+                '<div class="cart-meta">' + starsHtml(p.rating) +
+                '<span class="cart-rating">' + Number(p.rating).toFixed(1) + '</span>' +
+                '<span class="cart-count">(' + Number(p.rating_count || 0).toLocaleString() + ')</span>' +
+                '<span class="cart-level">' + levelBadge(p.level) + '</span>' +
+                '</div>' +
+                '</div>' +
+                '<div class="cart-side">' +
+                '<span class="cart-price">$' + p.price.toFixed(2) + '</span>' +
+                '<button class="cart-remove" data-id="' + p.id + '" aria-label="Remove ' + escapeHtml(p.title) + '">' +
+                '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>' +
+                '<span>Remove</span>' +
+                '</button>' +
+                '</div>' +
+                '</div>';
+        }).join('');
+
+        container.innerHTML =
+            '<div class="cart-layout">' +
+            '<div class="cart-items">' + rows + '</div>' +
+            '<div class="cart-summary reveal">' +
+            '<h3>Summary</h3>' +
+            '<div class="cart-summary-row"><span>' + products.length + (products.length === 1 ? ' course' : ' courses') + '</span><span>$' + total.toFixed(2) + '</span></div>' +
+            '<div class="cart-summary-row cart-summary-total"><span>Total</span><span>$' + total.toFixed(2) + '</span></div>' +
+            '<button class="btn btn-dark" id="pay-btn" style="width: 100%; text-align: center;">Pay $' + total.toFixed(2) + '</button>' +
+            '<p class="muted" style="font-size: 0.75rem; text-align: center; margin-top: 0.6rem;">Demo checkout — no payment is taken.</p>' +
+            '</div>' +
+            '</div>';
+
+        attachHandlers(products);
+        reveal(container.firstElementChild);
+    }
+
+    function attachHandlers(products) {
+        container.querySelectorAll('.cart-remove').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                window.UPulseCart.remove(btn.dataset.id);
+                loadCart();
+            });
+        });
+
+        const payBtn = document.getElementById('pay-btn');
+        if (payBtn) {
+            payBtn.addEventListener('click', function () {
+            if (window.UPulseTracker && token) {
+                products.forEach(function (p) {
+                    window.UPulseTracker.trackCheckout(p.id, p.title);
+                });
+            }
+                payBtn.disabled = true;
+                payBtn.textContent = 'Processing...';
+            const total = products.reduce(function (s, p) { return s + p.price; }, 0);
+            setTimeout(function () {
+                window.UPulseCart.clear();
+                container.innerHTML = '<div class="rec-empty reveal">' +
+                    '<h3>Order complete</h3>' +
+                    '<p>This was a demo checkout — your cart has been cleared and the purchase intent was recorded.</p>' +
+                    '<a class="btn" href="/">Back to catalog</a>' +
+                    '</div>';
+                if (window.Motion && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                    window.Motion.animate(container.firstElementChild, { opacity: [0, 1], y: [10, 0] }, { duration: 0.3, easing: 'ease-out' });
+                }
+            }, 1200);
+            });
+        }
+    }
+
+    async function loadCart() {
+        const ids = window.UPulseCart.get();
+        if (ids.length === 0) {
+            renderEmpty();
+            return;
+        }
+        try {
+            const res = await fetch('/api/products');
+            const all = await res.json();
+            const byId = {};
+            all.forEach(function (p) { byId[p.id] = p; });
+            const products = ids.map(function (id) { return byId[id]; }).filter(Boolean);
+            if (products.length === 0) {
+                window.UPulseCart.clear();
+                renderEmpty();
+                return;
+            }
+            renderCart(products);
+        } catch (err) {
+            renderEmpty();
+        }
+    }
+
+    window.addEventListener('upulse-cart', loadCart);
+    loadCart();
+})();
+</script>
+{% endblock %}

@@ -1,28 +1,388 @@
 {% extends "base.html" %}
 
-{% block title %}Catalog — SmartReco{% endblock %}
+{% import "_glyphs.html" as glyphs %}
+
+{% block title %}Catalog — UPulse{% endblock %}
+{% block main_class %}wide{% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom: 1.5rem;">Course Catalog</h1>
+<style>
+    /* Force the Spline viewer to actually take up space, independent of
+       whatever is (or isn't) defined in style.css for this element. */
+    .scene-card {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: 420px;
+        overflow: hidden;
+        border-radius: 16px;
+    }
+    .scene-card spline-viewer {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+</style>
+<div class="catalog-hero">
+    <div class="catalog-hero-grid">
+        <div class="catalog-hero-main">
+            <span class="eyebrow">Curated by your behavior</span>
+            <h1>Find what moves you forward</h1>
+            <div class="hero-meta-wrap">
+                <p class="hero-sub">&ldquo;UPulse learns what catches your attention, what keeps you coming back, and what you&rsquo;re ready for next.&rdquo;</p>
+                <span class="hero-meta" id="result-count">{{ products | length }} courses matched</span>
+            </div>
+
+            <div class="search-row">
+                <div class="search-field">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="text" id="search-input" placeholder="Search skills, topics, or outcomes..." autocomplete="off">
+                    <button type="button" class="search-clear" id="search-clear" aria-label="Clear search" hidden>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <button class="btn btn-dark" id="search-btn" type="button">Search</button>
+            </div>
+
+            <div class="pill-row" id="category-pills">
+                <button class="pill active" data-category="">All</button>
+                {% for category in categories %}
+                <button class="pill" data-category="{{ category }}">{{ category }}</button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="scene-card" id="scene-card" aria-hidden="true">
+            <spline-viewer id="spline-scene" data-url="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"></spline-viewer>
+            <div class="scene-loader" id="scene-loader"><span class="loader"></span></div>
+        </div>
+    </div>
+</div>
+
+<div id="live-stream" style="margin-bottom: 2.5rem;">
+    <div class="signal-block" id="signal-block" style="max-width: 420px;">
+        <div class="signal-header"><span class="signal-title">Your Signal</span></div>
+        <div class="signal-rows"><p class="signal-empty">Loading...</p></div>
+    </div>
+</div>
 
 {% if products %}
-    <div style="display: grid; gap: 1rem;">
-        {% for product in products %}
-        <div class="card product-card" data-product-id="{{ product.id }}">
-            <h3 style="margin-bottom: 0.4rem;">
-                <a href="/products/{{ product.id }}" style="color: #1a1a1a; text-decoration: none;">
-                    {{ product.title }}
-                </a>
-            </h3>
-            <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.6rem;">{{ product.category }}</p>
-            <p style="margin-bottom: 0.8rem;">{{ product.description }}</p>
-            <strong>${{ "%.2f"|format(product.price) }}</strong>
-        </div>
-        {% endfor %}
+{% for category in categories %}
+<div class="section-head reveal-scroll" data-section="{{ category }}">
+    <div>
+        <span class="eyebrow" data-section-count="{{ category }}">{{ products | selectattr("category", "equalto", category) | list | length }} courses</span>
+        <h2>{{ category }}</h2>
     </div>
-{% else %}
-    <p>No products yet. Check back soon.</p>
-{% endif %}
+</div>
+<div class="course-row" data-section="{{ category }}">
+    {% for product in products if product.category == category %}
+    <a href="/products/{{ product.id }}" class="course-card product-card"
+       data-product-id="{{ product.id }}"
+       data-title="{{ product.title | lower }}"
+       data-description="{{ product.description | lower }}"
+       data-category="{{ product.category }}">
+        <div class="cover cover-{{ cover_index(product.category) }}">
+            <span class="cover-badge">{{ product.level }}</span>
+            <span class="cover-glyph">{{ glyphs.cover_glyph(product.category) }}</span>
+        </div>
+        <div class="card-body">
+            <div class="card-eyebrow"><span>{{ product.category }}</span></div>
+            <h3>{{ product.title }}</h3>
+            <div class="card-stars">
+                <span class="stars" aria-label="Rated {{ "%.1f"|format(product.rating or 0) }} out of 5">
+                    <span class="stars-track">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>
+                    </span>
+                    <span class="stars-fill" style="width: {{ (product.rating or 0) / 5 * 100 }}%">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>
+                    </span>
+                </span>
+                <span class="stars-value">{{ "%.1f"|format(product.rating or 0) }}</span>
+                <span class="stars-count">({{ (product.rating_count or 0) | int }})</span>
+            </div>
+            <p class="desc">{{ product.description }}</p>
+            <div class="card-foot">
+                <span class="price">${{ "%.2f"|format(product.price) }}</span>
+                <span class="see-more">View &rarr;</span>
+            </div>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endfor %}
 
+<p id="no-results" class="muted" style="display: none; padding: 2rem 0; text-align: center;">No courses match your search.</p>
+
+<script>
+(function () {
+    const searchInput = document.getElementById('search-input');
+    const searchBtn = document.getElementById('search-btn');
+    const searchClear = document.getElementById('search-clear');
+    if (!searchInput) return;
+    const pills = Array.from(document.querySelectorAll('#category-pills .pill'));
+    const cards = Array.from(document.querySelectorAll('.product-card'));
+    const noResults = document.getElementById('no-results');
+    const resultCount = document.getElementById('result-count');
+    const sections = document.querySelectorAll('[data-section]');
+
+    let activeCategory = '';
+    let searchDebounce = null;
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = String(str ?? '');
+        return div.innerHTML;
+    }
+
+    function highlightMatch(el, query) {
+        if (!el) return;
+        if (!query) {
+            if (el.dataset.plain !== undefined) {
+                el.innerHTML = el.dataset.plain;
+            }
+            return;
+        }
+        if (el.dataset.plain === undefined) {
+            el.dataset.plain = el.innerHTML;
+        }
+        const plain = el.dataset.plain;
+        const escaped = escapeHtml(plain);
+        let q;
+        try { q = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+        catch (err) { q = query; }
+        const re = new RegExp('(' + q + ')', 'gi');
+        el.innerHTML = escaped.replace(re, '<mark class="hl">$1</mark>');
+    }
+
+    function visibleCards() {
+        const query = searchInput.value.trim().toLowerCase();
+        let visibleCount = 0;
+
+        cards.forEach(function (card) {
+            const matchesQuery = !query ||
+                card.dataset.title.includes(query) ||
+                card.dataset.description.includes(query);
+            const matchesCategory = !activeCategory || card.dataset.category === activeCategory;
+            const visible = matchesQuery && matchesCategory;
+
+            card.style.display = visible ? 'block' : 'none';
+            if (visible) visibleCount++;
+
+            const titleEl = card.querySelector('h3');
+            const descEl = card.querySelector('.desc');
+            if (visible && query) {
+                const matchedTitle = card.dataset.title.includes(query);
+                const matchedDesc = card.dataset.description.includes(query);
+                if (matchedTitle) highlightMatch(titleEl, query);
+                if (matchedDesc) highlightMatch(descEl, query);
+            } else {
+                highlightMatch(titleEl, '');
+                highlightMatch(descEl, '');
+            }
+        });
+
+        sections.forEach(function (el) {
+            const sectionCategory = el.dataset.section;
+            const hasVisible = cards.some(function (c) {
+                return c.dataset.category === sectionCategory && c.style.display !== 'none';
+            });
+            el.style.display = hasVisible ? '' : 'none';
+            if (el.classList.contains('section-head')) {
+                const countEl = el.querySelector('[data-section-count]');
+                if (countEl) {
+                    const n = cards.filter(function (c) {
+                        return c.dataset.category === sectionCategory && c.style.display !== 'none';
+                    }).length;
+                    countEl.textContent = n + (n === 1 ? ' course' : ' courses');
+                }
+            }
+        });
+
+        noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+        resultCount.textContent = visibleCount + (visibleCount === 1 ? ' course matched' : ' courses matched');
+    }
+
+    function syncClearButton() {
+        if (!searchClear) return;
+        searchClear.hidden = searchInput.value.length === 0;
+    }
+
+    function setCategory(category) {
+        activeCategory = category;
+        pills.forEach(function (p) { p.classList.toggle('active', p.dataset.category === category); });
+        applyFilters();
+    }
+
+    function trackSearchNow() {
+        const query = searchInput.value.trim();
+        if (query.length >= 2 && window.UPulseTracker) {
+            window.UPulseTracker.trackSearch(query, activeCategory);
+        }
+    }
+
+    function applyFilters() {
+        visibleCards();
+        syncClearButton();
+    }
+
+    searchInput.addEventListener('input', function () {
+        applyFilters();
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(trackSearchNow, 600);
+    });
+    searchBtn.addEventListener('click', function () {
+        applyFilters();
+        clearTimeout(searchDebounce);
+        trackSearchNow();
+    });
+    if (searchClear) {
+        searchClear.addEventListener('click', function () {
+            searchInput.value = '';
+            searchInput.focus();
+            applyFilters();
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(trackSearchNow, 600);
+        });
+    }
+
+    pills.forEach(function (pill) {
+        pill.addEventListener('click', function () { setCategory(pill.dataset.category); });
+    });
+
+    applyFilters();
+})();
+</script>
+<script>
+(function () {
+    if (!window.Motion || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const cards = Array.from(document.querySelectorAll('.course-row .product-card'));
+    cards.forEach(function (card, i) {
+        card.style.opacity = 0;
+        window.Motion.animate(card, { opacity: 1, y: [12, 0] }, { duration: 0.32, delay: Math.min(i * 0.02, 0.5), easing: 'ease-out' });
+    });
+})();
+</script>
+<script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.72/build/spline-viewer.js"></script>
+<script>
+(function () {
+    var card = document.getElementById('scene-card');
+    var viewer = document.getElementById('spline-scene');
+    var loader = document.getElementById('scene-loader');
+    if (!card || !viewer) return;
+
+    // Lazy-load the 3D scene only when the card is about to scroll into view.
+    if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    viewer.setAttribute('url', viewer.dataset.url);
+                    io.disconnect();
+                }
+            });
+        }, { rootMargin: '300px' });
+        io.observe(card);
+    } else {
+        viewer.setAttribute('url', viewer.dataset.url);
+    }
+
+    viewer.addEventListener('load', function () {
+        if (loader) loader.style.display = 'none';
+    });
+    viewer.addEventListener('error', function () {
+        if (loader) loader.style.display = 'none';
+    });
+    setTimeout(function () {
+        if (loader) loader.style.display = 'none';
+    }, 15000);
+})();
+</script>
+<script>
+(function () {
+    const el = document.querySelector('.hero-sub');
+    if (!el) return;
+    const FULL = el.textContent.trim();
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return;
+    const cursor = document.createElement('span');
+    cursor.className = 'type-cursor';
+    el.textContent = '';
+    el.appendChild(cursor);
+    let i = 0;
+    (function type() {
+        if (i < FULL.length) {
+            el.insertBefore(document.createTextNode(FULL.charAt(i)), cursor);
+            i++;
+            setTimeout(type, 30 + Math.random() * 40);
+        } else {
+            setTimeout(function () {
+                cursor.classList.add('hide');
+                setTimeout(function () { cursor.remove(); }, 300);
+            }, 3000);
+        }
+    })();
+})();
+</script>
+<script>
+(function () {
+    const viewer = document.querySelector('spline-viewer');
+    if (!viewer) return;
+    const kill = function () {
+        const sr = viewer.shadowRoot;
+        if (!sr) return;
+        sr.querySelectorAll('a[href*="spline.design"]').forEach(function (a) { a.remove(); });
+    };
+    kill();
+    if (viewer.shadowRoot) {
+        new MutationObserver(kill).observe(viewer.shadowRoot, { childList: true, subtree: true });
+    } else {
+        document.addEventListener('DOMContentLoaded', kill);
+    }
+})();
+</script>
 <script src="/static/js/tracker.js"></script>
+<script>
+(function () {
+    const container = document.getElementById('signal-block');
+    const token = localStorage.getItem('access_token');
+    const POLL_MS = 4000;
+    let debounceHandle = null;
+
+    async function fetchRecent() {
+        if (!token) return [];
+        try {
+            const res = await fetch('/api/events/recent', { headers: { 'Authorization': 'Bearer ' + token } });
+            return res.ok ? res.json() : [];
+        } catch (err) { return []; }
+    }
+
+    async function poll() {
+        const events = await fetchRecent();
+        window.UPulseTracker.renderSignal(container, events, { title: 'Your Signal' });
+    }
+
+    if (window.UPulseTracker) {
+        window.UPulseTracker.onEvent = function () {
+            clearTimeout(debounceHandle);
+            debounceHandle = setTimeout(poll, 400);
+        };
+    }
+
+    if (token) {
+        poll();
+        setInterval(poll, POLL_MS);
+    } else {
+        const rows = container && container.querySelector('.signal-rows');
+        if (rows) {
+            rows.innerHTML = '<p class="signal-empty">Your live signal appears here after you sign in.</p>' +
+                '<div class="signal-cta">' +
+                '<a class="btn btn-sm" href="/login">Log in</a>' +
+                '<a class="btn btn-sm btn-ghost-dark" href="/register">Get started</a>' +
+                '</div>';
+        }
+    }
+})();
+</script>
+{% else %}
+<div class="card"><p class="muted">No products yet. Check back soon.</p></div>
+{% endif %}
 {% endblock %}

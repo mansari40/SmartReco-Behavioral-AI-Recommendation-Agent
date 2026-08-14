@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Create account, SmartReco{% endblock %}
+{% block main_class %}wide{% endblock %}
+
+{% block content %}
+<div class="auth-split">
+    <div class="auth-copy">
+        <span class="eyebrow">Your path, not the crowd's</span>
+        <h1>Let your interests <span class="accent-italic">shape what comes next.</span></h1>
+        <p class="lede">Browse naturally. The agent watches real signal, searches, views, time spent, and builds a recommendation from it, visible on the Console for admins.</p>
+    </div>
+
+    <div class="auth-card">
+        <span class="eyebrow">Free account</span>
+        <h2>Create your account</h2>
+        <div id="error" class="error" style="display: none;"></div>
+        <form id="register-form">
+            <label for="first_name">First name</label>
+            <input type="text" id="first_name" placeholder="Your first name" required autocomplete="given-name">
+            <label for="last_name">Last name</label>
+            <input type="text" id="last_name" placeholder="Your last name" required autocomplete="family-name">
+            <label for="email">Email address</label>
+            <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+            <label for="password">Password</label>
+            <input type="password" id="password" placeholder="At least 8 characters" required autocomplete="new-password" minlength="8">
+            <label for="password2">Confirm password</label>
+            <input type="password" id="password2" placeholder="Re-enter your password" required autocomplete="new-password" minlength="8">
+            <button type="submit" class="btn" style="width: 100%;">Create account &rarr;</button>
+        </form>
+        <p class="auth-footer">Already have an account? <a href="/login">Sign in</a></p>
+        <p class="auth-footer"><a href="/password-reset">Forgot password?</a></p>
+    </div>
+</div>
+
+<script>
+const registerForm = document.getElementById('register-form');
+if (registerForm) registerForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = document.getElementById('error');
+    errorEl.style.display = 'none';
+
+    const firstName = document.getElementById('first_name').value.trim();
+    const lastName = document.getElementById('last_name').value.trim();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const password2 = document.getElementById('password2').value;
+
+    if (password !== password2) {
+        errorEl.textContent = 'Passwords do not match.';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ first_name: firstName, last_name: lastName, email: email, password: password }),
+        });
+
+        if (!res.ok) {
+            const data = await res.json();
+            errorEl.textContent = data.detail || 'Could not create account.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        const body = new URLSearchParams();
+        body.append('username', email);
+        body.append('password', password);
+        const loginRes = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body,
+        });
+        const loginData = await loginRes.json();
+        localStorage.setItem('access_token', loginData.access_token);
+        document.cookie = 'upulse_token=' + encodeURIComponent(loginData.access_token) + '; path=/; max-age=86400; samesite=lax';
+
+        const meRes = await fetch('/api/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + loginData.access_token },
+        });
+        if (meRes.ok) {
+            const me = await meRes.json();
+            localStorage.setItem('user_role', me.role);
+            localStorage.setItem('smartreco_user_id', me.id);
+        }
+
+        window.location.href = '/';
+    } catch (err) {
+        errorEl.textContent = 'Something went wrong. Try again.';
+        errorEl.style.display = 'block';
+    }
+});
+</script>
+{% endblock %}

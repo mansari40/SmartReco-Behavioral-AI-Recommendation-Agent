@@ -3,70 +3,257 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}SmartReco{% endblock %}</title>
+    <title>{% block title %}UPulse{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/vendor/motion.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f7f7f8;
-            color: #1a1a1a;
-            line-height: 1.5;
+        /* ---- Theme variables (light default) ---- */
+        :root {
+            --upulse-bg: #ffffff;
+            --upulse-bg-alt: #f7f7f8;
+            --upulse-text: #1a1a1a;
+            --upulse-text-muted: #6b6b70;
+            --upulse-border: #e4e4e7;
+            --upulse-card-bg: #ffffff;
+            --upulse-nav-bg: #ffffff;
         }
-        nav {
-            background: #1a1a2e;
-            color: white;
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
+        html[data-theme="dark"] {
+            --upulse-bg: #14101f;
+            --upulse-bg-alt: #1c1626;
+            --upulse-text: #f2f2f3;
+            --upulse-text-muted: #a5a0b3;
+            --upulse-border: #322a41;
+            --upulse-card-bg: #1e1729;
+            --upulse-nav-bg: #181222;
+            --upulse-accent: #8b85f7;
+        }
+        html[data-theme="dark"] body {
+            background: var(--upulse-bg) !important;
+            color: var(--upulse-text) !important;
+        }
+        html[data-theme="dark"] nav {
+            background: var(--upulse-nav-bg) !important;
+            border-color: var(--upulse-border) !important;
+        }
+        html[data-theme="dark"] a { color: var(--upulse-text); }
+        html[data-theme="dark"] .card,
+        html[data-theme="dark"] .product-card,
+        html[data-theme="dark"] .course-card,
+        html[data-theme="dark"] .rec-card,
+        html[data-theme="dark"] .auth-card,
+        html[data-theme="dark"] .signal-block,
+        html[data-theme="dark"] .cart-dropdown {
+            background: var(--upulse-card-bg) !important;
+            border-color: var(--upulse-border) !important;
+            color: var(--upulse-text) !important;
+        }
+        html[data-theme="dark"] input,
+        html[data-theme="dark"] textarea,
+        html[data-theme="dark"] select {
+            background: var(--upulse-bg-alt) !important;
+            color: var(--upulse-text) !important;
+            border-color: var(--upulse-border) !important;
+        }
+        html[data-theme="dark"] .muted,
+        html[data-theme="dark"] .desc,
+        html[data-theme="dark"] .eyebrow,
+        html[data-theme="dark"] .hero-sub {
+            color: var(--upulse-text-muted) !important;
+        }
+        html[data-theme="dark"] .site-footer {
+            border-color: var(--upulse-border) !important;
+        }
+        html[data-theme="dark"] .footer-chip {
+            background: var(--upulse-bg-alt) !important;
+            border-color: var(--upulse-border) !important;
+            color: var(--upulse-text-muted) !important;
+        }
+        html[data-theme="dark"] .footer-chip-accent {
+            color: var(--upulse-accent) !important;
+            border-color: rgba(139, 133, 247, 0.3) !important;
+            background: rgba(139, 133, 247, 0.12) !important;
+        }
+        html[data-theme="dark"] .footer-tagline {
+            color: var(--upulse-text-muted) !important;
+        }
+        html[data-theme="dark"] .rec-explain,
+        html[data-theme="dark"] .rec-card .rec-reason {
+            background: rgba(139, 133, 247, 0.12) !important;
+            border-color: rgba(139, 133, 247, 0.25) !important;
+        }
+        html[data-theme="dark"] .rec-chip {
+            background: var(--upulse-bg-alt) !important;
+            border-color: var(--upulse-border) !important;
+            color: var(--upulse-text-muted) !important;
+        }
+        html[data-theme="dark"] .rec-chip b { color: var(--upulse-text) !important; }
+        html[data-theme="dark"] .rec-chip-accent {
+            background: rgba(139, 133, 247, 0.12) !important;
+            border-color: rgba(139, 133, 247, 0.3) !important;
+            color: var(--upulse-accent) !important;
+        }
+        html[data-theme="dark"] mark.hl {
+            background: rgba(139, 133, 247, 0.2) !important;
+            color: #c9c4ff !important;
+        }
+        html[data-theme="dark"] .search-clear {
+            background: var(--upulse-bg-alt) !important;
+            color: var(--upulse-text-muted) !important;
+        }
+        html[data-theme="dark"] .signal-cta .btn { border-color: var(--upulse-border) !important; }
+        html[data-theme="dark"] .site-footer::before { opacity: 0.5; }
+
+        /* ---- Theme toggle ---- */
+        .theme-toggle {
+            display: inline-flex;
             align-items: center;
-        }
-        nav a { color: white; text-decoration: none; margin-left: 1.5rem; font-size: 0.95rem; }
-        nav a:hover { text-decoration: underline; }
-        .brand { font-weight: 700; font-size: 1.1rem; }
-        main { max-width: 1000px; margin: 2rem auto; padding: 0 1.5rem; }
-        .card {
-            background: white;
-            border-radius: 10px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            margin-bottom: 1rem;
-        }
-        .btn {
-            display: inline-block;
-            background: #4f46e5;
-            color: white;
-            border: none;
-            padding: 0.6rem 1.2rem;
-            border-radius: 6px;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            border: 1px solid var(--upulse-border);
+            background: var(--upulse-bg-alt);
             cursor: pointer;
-            font-size: 0.95rem;
-            text-decoration: none;
+            margin-right: 0.4rem;
         }
-        .btn:hover { background: #4338ca; }
-        input, textarea {
-            width: 100%;
-            padding: 0.6rem;
-            border: 1px solid #ddd;
+        .theme-toggle svg { width: 16px; height: 16px; }
+        .theme-toggle .icon-sun { display: none; }
+        html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+        html[data-theme="dark"] .theme-toggle .icon-sun { display: inline-block; }
+
+        /* ---- Cart dropdown ---- */
+        .nav-cart-wrap { position: relative; display: inline-flex; }
+        button.nav-cart {
+            background: none;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            position: relative;
+            color: inherit;
+        }
+        .cart-dropdown {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            width: 320px;
+            max-height: 420px;
+            display: flex;
+            flex-direction: column;
+            background: var(--upulse-card-bg);
+            border: 1px solid var(--upulse-border);
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+            overflow-y: auto;
+            z-index: 50;
+            padding: 0.5rem;
+        }
+        .cart-dropdown[hidden] { display: none; }
+        .cart-dropdown-header {
+            padding: 0.75rem 0.75rem 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--upulse-text-muted);
+            border-bottom: 1px solid var(--upulse-border);
+            margin-bottom: 0.25rem;
+        }
+        .cart-dropdown-empty {
+            padding: 1.25rem 0.75rem;
+            text-align: center;
+            color: var(--upulse-text-muted);
+            font-size: 0.875rem;
+        }
+        .cart-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 0.5rem;
+            border-radius: 8px;
+        }
+        .cart-item:hover { background: var(--upulse-bg-alt); }
+        .cart-item-info { flex: 1; min-width: 0; }
+        .cart-item-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--upulse-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .cart-item-meta {
+            font-size: 0.75rem;
+            color: var(--upulse-text-muted);
+            margin-top: 0.1rem;
+        }
+        .cart-item-remove {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--upulse-text-muted);
+            padding: 0.25rem;
+            display: inline-flex;
             border-radius: 6px;
-            margin-bottom: 0.8rem;
-            font-size: 0.95rem;
+        }
+        .cart-item-remove:hover { color: #dc2626; background: rgba(220, 38, 38, 0.08); }
+        .cart-count {
+            position: absolute;
+            top: -6px;
+            right: -8px;
+            min-width: 17px;
+            height: 17px;
+            padding: 0 4px;
+            border-radius: 999px;
+            background: #dc2626;
+            color: #fff;
+            font-size: 0.68rem;
+            font-weight: 700;
+            display: none;
+            align-items: center;
+            justify-content: center;
         }
         .error { color: #dc2626; margin-bottom: 1rem; }
     </style>
 </head>
 <body>
     <nav>
-        <span class="brand">SmartReco</span>
-        <div>
-            <a href="/">Catalog</a>
-            <a href="/recommendations">For You</a>
-            <a href="#" id="nav-auth-link">Login</a>
+        <a class="brand" href="/">
+            <span class="logo-mark">U</span>
+            <span class="brand-name">UPulse</span>
+        </a>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Catalog</a>
+            <a href="/how-it-works" class="nav-link">How it works</a>
+            <a href="/recommendations" class="nav-link">For You</a>
+        </div>
+        <div class="nav-actions">
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+            </button>
+            <div class="nav-cart-wrap">
+                <button type="button" class="nav-cart" id="nav-cart" aria-label="Cart">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                    <span class="cart-count" id="cart-count"></span>
+                </button>
+                <div class="cart-dropdown" id="cart-dropdown" hidden>
+                    <div class="cart-dropdown-header">Your cart</div>
+                    <div id="cart-dropdown-items"></div>
+                </div>
+            </div>
+            <a href="/register" class="nav-auth nav-auth-solid" id="nav-get-started">Get started</a>
+            <a href="#" id="nav-auth-link" class="nav-auth">Login</a>
         </div>
     </nav>
 
     <script>
     (function() {
         const link = document.getElementById('nav-auth-link');
+        const getStarted = document.getElementById('nav-get-started');
         const token = localStorage.getItem('access_token');
         if (token) {
             link.textContent = 'Logout';
@@ -74,16 +261,139 @@
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 localStorage.removeItem('access_token');
+                localStorage.removeItem('user_role');
                 window.location.href = '/';
             });
+            if (getStarted) getStarted.remove();
         } else {
             link.href = '/login';
         }
+    })();
+
+    (function() {
+        const btn = document.getElementById('theme-toggle');
+        const root = document.documentElement;
+        const stored = localStorage.getItem('upulse_theme');
+        if (stored === 'dark') root.setAttribute('data-theme', 'dark');
+        btn.addEventListener('click', () => {
+            const isDark = root.getAttribute('data-theme') === 'dark';
+            if (isDark) root.removeAttribute('data-theme');
+            else root.setAttribute('data-theme', 'dark');
+            localStorage.setItem('upulse_theme', isDark ? 'light' : 'dark');
+        });
+    })();
+
+    (function() {
+        const wrap = document.querySelector('.nav-cart-wrap');
+        const dropdown = document.getElementById('cart-dropdown');
+        const btn = document.getElementById('nav-cart');
+        if (!wrap || !dropdown || !btn) return;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.hidden = !dropdown.hidden;
+            if (!dropdown.hidden && window.UPulseCart) window.UPulseCart.renderDropdown();
+        });
+        document.addEventListener('click', (e) => {
+            if (!wrap.contains(e.target)) dropdown.hidden = true;
+        });
+    })();
+
+    (function() {
+        const nav = document.querySelector('nav');
+        if (!nav) return;
+        const onScroll = () => {
+            nav.classList.toggle('nav-scrolled', window.scrollY > 8);
+        };
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+    })();
+
+    (function() {
+        const initReveals = () => {
+            const els = Array.from(document.querySelectorAll('.reveal-scroll'));
+            if (!els.length) return;
+            if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                els.forEach((el) => el.classList.add('revealed'));
+                return;
+            }
+            const io = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('revealed');
+                        io.unobserve(entry.target);
+                    }
+                });
+            }, { rootMargin: '0px 0px -40px 0px' });
+            els.forEach((el) => io.observe(el));
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initReveals);
+        } else {
+            initReveals();
+        }
+    })();
+
+    (function() {
+        const GLYPHS = {
+            ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="17" r="2.2"/><circle cx="19" cy="17" r="2.2"/><path d="M11.2 7.1 6.4 15.1M12.8 7.1l4.8 8M7.2 17h9.6"/><path d="M12 5v2.2M5 17h2.2M19 17h-2.2"/></svg>',
+            business: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V4"/><path d="M21 21H3"/><path d="M7 17v-5"/><path d="M12 17V8"/><path d="M17 17v-9"/></svg>',
+            cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><path d="M12 11v6M9.5 14.5 12 17l2.5-2.5"/></svg>',
+            culinary: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 7V4a2 2 0 0 1 4 0v3"/><path d="M13.5 7V4a2 2 0 0 1 4 0v3"/><path d="M6.5 7h11v2.5a5.5 5.5 0 0 1-11 0V7Z"/><path d="M4 14h16v2.5a5.5 5.5 0 0 1-5.5 5.5h-5A5.5 5.5 0 0 1 4 16.5V14Z"/></svg>',
+            security: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z"/><path d="m9 11 2 2 4-4"/></svg>',
+            database: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></svg>',
+            datascience: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><circle cx="8" cy="14" r="1.4"/><circle cx="13" cy="9" r="1.4"/><circle cx="17" cy="15" r="1.4"/><path d="m8 14 5-5 4 6"/></svg>',
+            design: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19 7-7 3 3-7 7-3-3Z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5Z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
+            code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m8 6-6 6 6 6M16 6l6 6-6 6"/></svg>',
+            sparkles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>'
+        };
+        const KEYS = [
+            ['ai', /(ai|machine|agent|llm|neural)/i],
+            ['business', /(business|marketing|management|finance|entrepreneur)/i],
+            ['cloud', /(cloud|devops|aws|azure|kubernetes|infrastructure)/i],
+            ['culinary', /(culin|kitchen|cook|food|baking)/i],
+            ['security', /(cyber|security|secur|hack|compliance)/i],
+            ['database', /(data eng|database|warehouse|pipeline|etl)/i],
+            ['datascience', /(data sci|analytics|statist|ml|machine learn)/i],
+            ['design', /(design|visual|creative|ux|ui|illustrat|figma)/i],
+            ['code', /(program|code|develop|python|javascript|sql|software|java|c\+\+|rust|web)/i]
+        ];
+        window.UPulseGlyphs = {
+            for: function (category) {
+                const c = String(category || '');
+                for (let i = 0; i < KEYS.length; i++) {
+                    if (KEYS[i][1].test(c)) return GLYPHS[KEYS[i][0]];
+                }
+                return GLYPHS.sparkles;
+            }
+        };
     })();
     </script>
 
     <main>
         {% block content %}{% endblock %}
     </main>
+
+    <footer class="site-footer">
+        <div class="footer-brand">
+            <span class="logo-mark footer-logo">U</span>
+            <p class="footer-tagline">&copy; Copyright 2026 <a href="https://www.linkedin.com/in/mustafa-ansari-135b73353/" target="_blank" rel="noopener">Mustafa Ansari</a></p>
+        </div>
+        <div class="footer-meta">
+            <span class="footer-chip"><span class="footer-status-dot" id="footer-status-dot"></span>Grounded in the live catalog</span>
+            <span class="footer-chip footer-chip-accent">AI routed exclusively through OpenRouter</span>
+        </div>
+    </footer>
+
+    <script>
+    (function () {
+        const dot = document.getElementById('footer-status-dot');
+        if (!dot) return;
+        setInterval(function () {
+            dot.classList.toggle('off');
+        }, 3500);
+    })();
+    </script>
+
+    <script src="/static/js/cart.js"></script>
 </body>
 </html>

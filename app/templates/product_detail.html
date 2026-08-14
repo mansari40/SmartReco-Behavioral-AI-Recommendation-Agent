@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% import "_glyphs.html" as glyphs %}
+
+{% block title %}{{ product.title }} — UPulse{% endblock %}
+{% block main_class %}wide{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Catalog</a> / <a href="/#{{ product.category }}">{{ product.category }}</a> / <span class="current">{{ product.title }}</span>
+</div>
+
+<div id="product-live" style="margin: 0 0 1.75rem;">
+    <div class="signal-block" id="signal-block" style="max-width: 420px;">
+        <div class="signal-header"><span class="signal-title">Activity around this course</span></div>
+        <div class="signal-rows"><p class="signal-empty">Loading...</p></div>
+    </div>
+</div>
+
+<div class="detail-layout">
+    <div>
+        <span class="eyebrow">{{ product.category }}</span>
+        <h1 class="detail-title">{{ product.title }}</h1>
+
+        <div class="detail-rating">
+            <span class="stars stars-lg" aria-label="Rated {{ "%.1f"|format(product.rating or 0) }} out of 5">
+                <span class="stars-track">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>
+                </span>
+                <span class="stars-fill" style="width: {{ (product.rating or 0) / 5 * 100 }}%">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>
+                </span>
+            </span>
+            <span class="detail-rating-value">{{ "%.1f"|format(product.rating or 0) }}</span>
+            <span class="detail-rating-count">({{ (product.rating_count or 0) | int }} ratings)</span>
+        </div>
+
+        <div class="tag-row">
+            <span class="tag-pill">{{ product.category }}</span>
+            <span class="tag-pill level-tag level-{{ product.level | lower }}">{{ product.level }}</span>
+        </div>
+
+        <div class="detail-body">
+            <p>{{ product.description }}</p>
+        </div>
+
+        {% if related %}
+        <div class="section-head" style="margin-top: 1rem;">
+            <div><span class="eyebrow">Keep exploring</span><h2 style="font-size: 1.4rem;">More in {{ product.category }}</h2></div>
+        </div>
+        <div class="course-row">
+            {% for r in related %}
+            <a href="/products/{{ r.id }}" class="course-card">
+                <div class="cover cover-{{ cover_index(r.category) }}" style="height: 110px;">
+                    <span class="cover-badge">{{ r.level }}</span>
+                    <span class="cover-glyph" style="width: 28px; height: 28px;">{{ glyphs.cover_glyph(r.category) }}</span>
+                </div>
+                <div class="card-body" style="padding: 1rem 1.2rem;">
+                    <h3 style="font-size: 0.98rem; margin-bottom: 0.4rem;">{{ r.title }}</h3>
+                    <span class="price" style="font-size: 0.88rem;">${{ "%.2f"|format(r.price) }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="buy-card">
+        <div class="detail-cover cover-{{ cover_index(product.category) }}">
+            <span class="cover-badge">{{ product.level }}</span>
+            <span class="cover-glyph">{{ glyphs.cover_glyph(product.category) }}</span>
+        </div>
+        <div class="buy-body">
+            <span class="price-large">${{ "%.2f"|format(product.price) }}</span>
+            <button class="btn" id="enroll-btn">Add to cart</button>
+            <p class="muted" style="font-size: 0.78rem; text-align: center; margin-bottom: 1.25rem;">Demo checkout — no payment is taken.</p>
+            <div class="meta-row"><span>Category</span><span>{{ product.category }}</span></div>
+            <div class="meta-row"><span>Level</span><span>{{ product.level }}</span></div>
+            <div class="meta-row"><span>Rating</span><span>{{ "%.1f"|format(product.rating or 0) }} ({{ (product.rating_count or 0) | int }} ratings)</span></div>
+            <div class="meta-row"><span>Format</span><span>Self-paced</span></div>
+            <div class="meta-row"><span>Added</span><span>{{ product.created_at.strftime("%b %Y") }}</span></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.__upulseProduct = { id: "{{ product.id }}", title: "{{ product.title | e }}", category: "{{ product.category | e }}" };
+</script>
+<script src="/static/js/tracker.js"></script>
+<script src="/static/js/cart.js"></script>
+<script>
+(function () {
+    const productId = "{{ product.id }}";
+    const container = document.getElementById('signal-block');
+    const token = localStorage.getItem('access_token');
+    const POLL_MS = 4000;
+    let debounceHandle = null;
+
+    async function fetchRecent() {
+        if (!token) return [];
+        try {
+            const res = await fetch('/api/events/recent', { headers: { 'Authorization': 'Bearer ' + token } });
+            return res.ok ? res.json() : [];
+        } catch (err) { return []; }
+    }
+
+    async function poll() {
+        const events = await fetchRecent();
+        window.UPulseTracker.renderSignal(container, events, {
+            title: 'Activity around this course',
+            highlightProductId: productId,
+        });
+    }
+
+    if (window.UPulseTracker) {
+        window.UPulseTracker.onEvent = function () {
+            clearTimeout(debounceHandle);
+            debounceHandle = setTimeout(poll, 400);
+        };
+    }
+
+    if (token) {
+        poll();
+        setInterval(poll, POLL_MS);
+    } else {
+        container.querySelector('.signal-rows').innerHTML =
+            '<p class="signal-empty">Log in to see live activity.</p>';
+    }
+})();
+
+document.getElementById('enroll-btn').addEventListener('click', function () {
+    if (window.UPulseTracker) window.UPulseTracker.trackAddToCart("{{ product.id }}", "{{ product.title | e }}");
+    window.UPulseCart.add("{{ product.id }}");
+    this.textContent = 'Added';
+    this.disabled = true;
+    if (window.Motion && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        window.Motion.animate(this, { scale: [1, 0.96, 1] }, { duration: 0.22, easing: 'ease-out' });
+    }
+});
+
+if (window.UPulseCart && window.UPulseCart.contains("{{ product.id }}")) {
+    const btn = document.getElementById('enroll-btn');
+    if (btn) {
+        btn.textContent = 'Added';
+        btn.disabled = true;
+    }
+}
+</script>
+{% endblock %}

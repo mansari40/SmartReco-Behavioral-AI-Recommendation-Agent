@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}How it works, UPulse{% endblock %}
+
+{% block content %}
+<div class="catalog-hero-main reveal-scroll" style="max-width: 780px;">
+    <span class="eyebrow">How it works</span>
+    <h1 style="font-size: 2.4rem; max-width: 18ch; margin-bottom: 1rem;">Your behavior becomes your next step.</h1>
+    <p class="muted" style="font-size: 1.02rem; max-width: 58ch; margin-bottom: 1.6rem;">UPulse doesn't guess. Every
+        search, click, and minute you spend in the catalog is observed, understood, and turned into a recommendation
+        that only gets better the more you explore.</p>
+    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 2.5rem;">
+        <a class="btn" href="/register">Get started</a>
+        <a class="btn btn-outline" href="/">Explore the catalog</a>
+    </div>
+</div>
+
+<div class="card reveal-scroll" style="margin-bottom: 2.5rem;">
+    <span class="eyebrow">The agent pipeline</span>
+    <div class="trace-bar" aria-label="Agent pipeline">
+        <span class="step active">Observe</span><span class="arrow">→</span>
+        <span class="step">Understand</span><span class="arrow">→</span>
+        <span class="step">Decide</span><span class="arrow">→</span>
+        <span class="step">Retrieve</span><span class="arrow">→</span>
+        <span class="step">Evaluate</span><span class="arrow">→</span>
+        <span class="step">Recommend</span><span class="arrow">→</span>
+        <span class="step">Validate</span><span class="arrow">→</span>
+        <span class="step">Store</span><span class="arrow">→</span>
+        <span class="step">Adapt</span>
+    </div>
+</div>
+
+<div class="section-head reveal-scroll">
+    <div>
+        <span class="eyebrow">The workflow</span>
+        <h2>Four steps, zero guessing</h2>
+    </div>
+</div>
+
+<div class="course-grid workflow-grid" style="margin-bottom: 3rem;">
+    <div class="card reveal-scroll">
+        <span class="tag-pill" style="display: inline-block; margin-bottom: 1.25rem;">Step 01</span>
+        <h3>Observe everything you do</h3>
+        <p class="muted">Every page view, product view, search, click, and second of time spent is captured
+            in batched, non-blocking events. Nothing you do is too small to matter.</p>
+    </div>
+    <div class="card reveal-scroll" style="transition-delay: 0.08s;">
+        <span class="tag-pill" style="display: inline-block; margin-bottom: 1.25rem;">Step 02</span>
+        <h3>Understand what it means</h3>
+        <p class="muted">The agent analyzes recency, frequency, search intent, and category exploration to
+            build a live picture of your interests, and how they're shifting.</p>
+    </div>
+    <div class="card reveal-scroll" style="transition-delay: 0.16s;">
+        <span class="tag-pill" style="display: inline-block; margin-bottom: 1.25rem;">Step 03</span>
+        <h3>Decide when to recommend</h3>
+        <p class="muted">It never calls the model after every event. Thresholds, caching, and deduplication
+            gate regeneration, a new topic or a meaningful change in intent triggers a fresh recommendation.</p>
+    </div>
+    <div class="card reveal-scroll" style="transition-delay: 0.24s;">
+        <span class="tag-pill" style="display: inline-block; margin-bottom: 1.25rem;">Step 04</span>
+        <h3>Retrieve, validate, deliver</h3>
+        <p class="muted">Semantic retrieval over the real catalog finds candidates, which are validated
+            against the SQL database before a personalized recommendation is written and stored for you.</p>
+    </div>
+</div>
+
+<div class="panel-dark reveal-scroll" style="margin-bottom: 3rem;">
+    <span class="eyebrow">The efficiency contract</span>
+    <h2>What you can rely on</h2>
+    <div class="panel-grid">
+        <div class="stat">
+            <h4>No model call per event</h4>
+            <p>Recommendations are regenerated only when meaningful triggers fire, never on every click.</p>
+        </div>
+        <div class="stat">
+            <h4>Catalog-grounded</h4>
+            <p>Every recommendation comes from the real catalog. Products, prices, and IDs are validated against SQL before display.</p>
+        </div>
+        <div class="stat">
+            <h4>Non-blocking tracking</h4>
+            <p>Behavioral events are batched and flushed asynchronously, so tracking never slows your browsing.</p>
+        </div>
+        <div class="stat">
+            <h4>Reuse over recompute</h4>
+            <p>Recommendations persist and are reused until your behavior meaningfully changes, then they adapt.</p>
+        </div>
+        <div class="stat">
+            <h4>Explainable</h4>
+            <p>Every recommendation explains itself in plain, user-safe language based on your observable behavior.</p>
+        </div>
+        <div class="stat">
+            <h4>Evolving with you</h4>
+            <p>Explore Python and ML, then shift to RAG and agents, your next step follows what you actually do.</p>
+        </div>
+    </div>
+</div>
+
+<div class="rec-empty reveal-scroll">
+    <h3>See it work with your own behavior</h3>
+    <p>Sign up, browse a few courses, and watch your next step appear.</p>
+    <a class="btn" href="/register">Create your account</a>
+</div>
+
+<script>
+(function () {
+    var steps = Array.prototype.slice.call(document.querySelectorAll('.trace-bar .step'));
+    if (steps.length < 2) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        steps.forEach(function (s) { s.classList.add('active'); });
+        return;
+    }
+    var i = 1;
+    var iv = setInterval(function () {
+        if (i >= steps.length) { clearInterval(iv); return; }
+        steps[i].classList.add('active');
+        i++;
+    }, 2000);
+})();
+</script>
+{% endblock %}
