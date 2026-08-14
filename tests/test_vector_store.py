@@ -1,53 +1,36 @@
-"""
-One-off smoke test for the vector store service. Not part of the app —
-safe to keep in tests/ or delete once confirmed working.
+"""Vector store service tests: upsert, semantic query, metadata filtering,
+and delete (dual-write correctness lives in test_products.py)."""
+import pytest
 
-Uses get_embedding() from mesh_client, which respects MOCK_EMBEDDINGS in
-.env — so this runs fine even with $0 Mesh balance, as long as
-MOCK_EMBEDDINGS=true is set locally.
-"""
-import asyncio
+from app.services import vector_store
+from tests.conftest import fake_embedding
 
-from app.services import llm_client, vector_store
 
-async def main():
-    print("Generating embeddings for two sample products...")
-    text_a = "Agentic AI Fundamentals. Category: AI. Learn to build reasoning agents with LangGraph."
-    text_b = "Introduction to Baking. Category: Culinary. Learn to bake bread and pastries at home."
-
-    emb_a = await llm_client.get_embedding(text_a)
-    emb_b = await llm_client.get_embedding(text_b)
-    print(f"Embedding A length: {len(emb_a)}")
-    print(f"Embedding B length: {len(emb_b)}")
-
-    print("\nUpserting both into Chroma...")
+@pytest.mark.asyncio
+async def test_upsert_query_filter_delete_cycle():
+    vid = "vs-test-product-1"
+    text = "A unique course about deep sea biology and marine life."
     await vector_store.upsert_product(
-        vector_id="test-product-a",
-        embedding=emb_a,
-        document=text_a,
-        metadata={"category": "AI", "price": 49.99},
+        vector_id=vid, embedding=fake_embedding(text), document=text,
+        metadata={"category": "Biology", "price": 25.0, "sql_id": "p-1"},
     )
-    await vector_store.upsert_product(
-        vector_id="test-product-b",
-        embedding=emb_b,
-        document=text_b,
-        metadata={"category": "Culinary", "price": 19.99},
+
+    # self-query returns the product first
+    results = await vector_store.query(embedding=fake_embedding(text), top_k=3)
+    ids = results.get("ids", [[]])[0]
+    assert vid in ids
+
+    # metadata filter narrows results
+    filtered = await vector_store.query(
+        embedding=fake_embedding(text), top_k=3, where={"category": "Biology"}
     )
-    print("Upserts complete.")
+    assert vid in filtered.get("ids", [[]])[0]
+    filtered_other = await vector_store.query(
+        embedding=fake_embedding(text), top_k=3, where={"category": "Cooking"}
+    )
+    assert vid not in filtered_other.get("ids", [[]])[0]
 
-    print("\nQuerying with product A's own embedding (should return A as closest match)...")
-    results = await vector_store.query(embedding=emb_a, top_k=2)
-    print("Query results:", results["ids"], results["documents"])
-
-    print("\nQuerying with a metadata filter (category=AI only)...")
-    filtered = await vector_store.query(embedding=emb_a, top_k=2, where={"category": "AI"})
-    print("Filtered results:", filtered["ids"])
-
-    print("\nDeleting both test products...")
-    await vector_store.delete_product("test-product-a")
-    await vector_store.delete_product("test-product-b")
-    print("Cleanup complete.")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    # delete removes it from retrieval entirely
+    await vector_store.delete_product(vid)
+    after = await vector_store.query(embedding=fake_embedding(text), top_k=5)
+    assert vid not in after.get("ids", [[]])[0]

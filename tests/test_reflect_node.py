@@ -1,57 +1,44 @@
-"""
-One-off smoke test for the reflect node. Tests both directions: does it
-correctly accept a good narrative, and does it correctly catch a flawed
-one (ignoring a stated objection)? A reflect node that approves
-everything regardless of quality isn't actually doing its job.
-"""
-import asyncio
+"""reflect node — honest critique that can request regeneration, bounded by
+the graph's retry cap; parse failures must never block a recommendation."""
+import pytest
 
 from app.agent.nodes.reflect import reflect_node
 
 
-async def main():
-    cognitive_model = {
-        "session_arc": "User has been researching agentic AI systems and comparing course options.",
-        "inferred_intents": ["building AI agents", "production RAG systems"],
-        "stated_intents": ["agentic ai", "langgraph"],
-        "decision_stage": "evaluation",
-        "purchase_readiness": 0.65,
-        "price_sensitivity": "medium",
-        "detected_objections": ["time commitment"],
-        "category_affinity": ["AI"],
-    }
-
-    print("Case 1: GOOD narrative (addresses the objection, fits the profile)")
-    good_state = {
-        "cognitive_model": cognitive_model,
-        "narrative": (
-            "You've clearly got momentum building toward agentic AI — and the good news is "
-            "this course fits into a busy schedule with self-paced, modular lessons, so time "
-            "commitment isn't the barrier it might seem."
-        ),
-        "persuasion_strategy": "scarcity_urgency",
+def make_state(**overrides):
+    return {
+        "cognitive_model": {"detected_objections": ["time"], "decision_stage": "evaluation"},
+        "narrative": "A narrative.",
+        "persuasion_strategy": "objection_handling",
         "regenerate_count": 0,
+        **overrides,
     }
-    result_good = await reflect_node(good_state)
-    print(f"  should_regenerate: {result_good['should_regenerate']}")
-    print(f"  feedback: {result_good['reflection_feedback']!r}")
-    print(f"  confidence: {result_good.get('confidence')}")
-
-    print("\nCase 2: BAD narrative (completely ignores the time-commitment objection, generic)")
-    bad_state = {
-        "cognitive_model": cognitive_model,
-        "narrative": (
-            "Check out our courses! They're great for anyone interested in learning "
-            "new skills. Sign up today and start your journey."
-        ),
-        "persuasion_strategy": "scarcity_urgency",
-        "regenerate_count": 0,
-    }
-    result_bad = await reflect_node(bad_state)
-    print(f"  should_regenerate: {result_bad['should_regenerate']}")
-    print(f"  feedback: {result_bad['reflection_feedback']!r}")
-    print(f"  regenerate_count: {result_bad['regenerate_count']}")
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+@pytest.mark.asyncio
+async def test_reflect_accepts_good_narrative(fake_llm):
+    result = await reflect_node(make_state())
+    assert result["should_regenerate"] is False
+    assert result["regenerate_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_reflect_can_request_regeneration(fake_llm):
+    fake_llm.responses = {"critiquing a generated": json.dumps(
+        {"should_regenerate": True, "feedback": "ignores the time objection", "confidence": 0.3}
+    )}
+    result = await reflect_node(make_state())
+    assert result["should_regenerate"] is True
+    assert result["regenerate_count"] == 1
+    assert "time" in result["reflection_feedback"]
+
+
+@pytest.mark.asyncio
+async def test_reflect_parse_failure_accepts(fake_llm):
+    fake_llm.responses = {"critiquing a generated": "not json"}
+    result = await reflect_node(make_state())
+    assert result["should_regenerate"] is False  # never block on a parse failure
+    assert result["reflection_feedback"] == ""
+
+
+import json  # noqa: E402

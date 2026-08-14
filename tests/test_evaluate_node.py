@@ -1,54 +1,52 @@
-"""
-One-off smoke test for the evaluate node. Feeds it two very different
-candidates (one clearly matching the user's interest, one clearly not)
-alongside a cognitive model, and checks that the LLM actually
-discriminates between them rather than scoring everything the same.
-"""
-import asyncio
+"""evaluate node — scores candidates against the cognitive model; malformed
+or sparse LLM output must degrade to neutral scores, never crash."""
+import json
+
+import pytest
 
 from app.agent.nodes.evaluate import evaluate_node
 
 
-async def main():
-    fake_state = {
-        "user_id": "test-user",
-        "cognitive_model": {
-            "session_arc": "User has been searching for and viewing agentic AI and LangGraph content repeatedly.",
-            "inferred_intents": ["agentic AI", "building AI agents", "RAG pipelines"],
-            "stated_intents": ["agentic ai", "langgraph"],
-            "decision_stage": "evaluation",
-            "purchase_readiness": 0.6,
-            "price_sensitivity": "medium",
-            "detected_objections": ["time commitment"],
-            "category_affinity": ["AI"],
-        },
+@pytest.mark.asyncio
+async def test_evaluate_scores_and_sorts(fake_llm):
+    state = {
+        "cognitive_model": {"inferred_intents": ["building AI agents"], "decision_stage": "evaluation"},
         "retrieved_candidates": [
-            {
-                "product_id": "ai-course-1",
-                "title": "Agentic AI Fundamentals",
-                "description": "Learn to build reasoning agents with LangGraph and RAG pipelines.",
-                "category": "AI",
-                "price": 49.99,
-                "distance": 0.1,
-            },
-            {
-                "product_id": "baking-course-1",
-                "title": "Introduction to Baking",
-                "description": "Learn to bake bread and pastries at home.",
-                "category": "Culinary",
-                "price": 19.99,
-                "distance": 0.9,
-            },
+            {"product_id": "a1", "title": "AI Course", "category": "AI", "description": "agents", "price": 50},
+            {"product_id": "b2", "title": "Baking", "category": "Culinary", "description": "bread", "price": 20},
         ],
     }
-
-    print("Running evaluate_node...")
-    result = await evaluate_node(fake_state)
-
-    print("\nEvaluated candidates (sorted by relevance_score):")
-    for c in result["evaluated_candidates"]:
-        print(f"  - {c['title']}: score={c['relevance_score']:.2f} | {c['evaluation_reasoning']}")
+    result = await evaluate_node(state)
+    assert len(result["evaluated_candidates"]) == 2
+    # mocked LLM returns 0.9 for everything → both kept, sorted
+    assert all(c["relevance_score"] == 0.9 for c in result["evaluated_candidates"])
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+@pytest.mark.asyncio
+async def test_evaluate_falls_back_on_garbage_llm(fake_llm):
+    fake_llm.responses = {"evaluating product candidates": "this is not json at all"}
+    state = {
+        "cognitive_model": {"inferred_intents": ["x"]},
+        "retrieved_candidates": [
+            {"product_id": "a1", "title": "A", "category": "AI", "description": "d", "price": 1},
+        ],
+    }
+    result = await evaluate_node(state)
+    assert result["evaluated_candidates"][0]["relevance_score"] == 0.5  # neutral fallback
+    assert "no evaluation returned" in result["evaluated_candidates"][0]["evaluation_reasoning"]
+
+
+@pytest.mark.asyncio
+async def test_evaluate_ignores_invented_product_ids(fake_llm):
+    fake_llm.responses = {"evaluating product candidates": json.dumps({
+        "scores": [{"product_id": "hallucinated-99", "relevance_score": 1.0, "reasoning": "fake"}]
+    })}
+    state = {
+        "cognitive_model": {"inferred_intents": ["x"]},
+        "retrieved_candidates": [
+            {"product_id": "real-1", "title": "Real", "category": "AI", "description": "d", "price": 1},
+        ],
+    }
+    result = await evaluate_node(state)
+    assert result["evaluated_candidates"][0]["product_id"] == "real-1"
+    assert result["evaluated_candidates"][0]["relevance_score"] == 0.5  # invented id dropped

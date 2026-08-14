@@ -1,15 +1,12 @@
-"""
-One-off smoke test for the model_user node in isolation. Creates a test
-user with realistic events, runs the node, and prints the resulting
-cognitive model — separate from the full graph so failures here are easy
-to pinpoint before wiring it into the larger pipeline.
-"""
-import asyncio
+"""model_user node — turns raw events into a persisted cognitive model,
+extracting recency signals deterministically (no LLM) alongside the LLM
+inference."""
+import json
 import uuid
 
-from sqlalchemy import select
+import pytest
 
-from app.agent.nodes.model_user import model_user_node
+from app.agent.nodes.model_user import model_user_node, _extract_recent_signals
 from app.db.session import AsyncSessionLocal
 from app.models.cognitive_model import UserCognitiveModel
 from app.models.event import Event, EventType
@@ -18,57 +15,53 @@ from app.models.user import User
 from app.security import hash_password
 
 
-async def setup_test_data() -> str:
+async def _seed(searches, views):
     async with AsyncSessionLocal() as db:
-        email = f"agent-test-{uuid.uuid4().hex[:8]}@example.com"
-        user = User(email=email, hashed_password=hash_password("testpass123"))
+        user = User(email=f"mu-{uuid.uuid4().hex[:8]}@test.com", hashed_password=hash_password("x"))
         db.add(user)
         await db.flush()
 
-        product = Product(
-            title="Agentic AI Fundamentals",
-            description="Learn to build reasoning agents with LangGraph.",
-            category="AI",
-            price=49.99,
-            vector_id=str(uuid.uuid4()),
-        )
-        db.add(product)
-        await db.flush()
+        products = {}
+        for title, category in views:
+            p = Product(title=title, description="desc", category=category, price=10.0,
+                        vector_id=str(uuid.uuid4()))
+            db.add(p)
+            await db.flush()
+            products[(title, category)] = p
 
-        events = [
-            Event(user_id=user.id, event_type=EventType.SEARCH,
-                  event_metadata={"query": "agentic ai"}),
-            Event(user_id=user.id, event_type=EventType.PRODUCT_VIEW,
-                  product_id=product.id, event_metadata={"time_spent": 120}),
-            Event(user_id=user.id, event_type=EventType.PRODUCT_VIEW,
-                  product_id=product.id, event_metadata={"time_spent": 90}),
-            Event(user_id=user.id, event_type=EventType.SEARCH,
-                  event_metadata={"query": "langgraph tutorial"}),
-        ]
+        events = [Event(user_id=user.id, event_type=EventType.SEARCH, event_metadata={"query": q}) for q in searches]
+        events += [Event(user_id=user.id, event_type=EventType.PRODUCT_VIEW,
+                         product_id=products[k].id, event_metadata={"title": k[0]}) for k in views]
         db.add_all(events)
         await db.commit()
-
-        print(f"Created test user {email} (id={user.id}) with {len(events)} events")
         return user.id
 
 
-async def main():
-    user_id = await setup_test_data()
+@pytest.mark.asyncio
+async def test_recent_signals_extracted_chronologically(fake_llm):
+    user_id = await _seed(["sql", "kafka", "dbt"], [("AI Course", "AI"), ("Kafka Course", "Data Engineering")])
+    async with AsyncSessionLocal() as db:
+        events = (await db.execute(
+            __import__("sqlalchemy").select(Event).where(Event.user_id == user_id)
+        )).scalars().all()
+        searches, categories = await _extract_recent_signals(events, {})
+        assert "sql" in searches and "kafka" in searches
+        # categories come from product lookups — empty map here, so verify via the node instead
 
-    print("\nRunning model_user_node...")
-    result = await model_user_node({"user_id": user_id, "trigger_reason": "manual test"})
 
-    print("\nReturned cognitive_model:")
-    for k, v in result["cognitive_model"].items():
-        print(f"  {k}: {v}")
+@pytest.mark.asyncio
+async def test_model_user_persists_cognitive_model(fake_llm):
+    user_id = await _seed(["agentic ai", "langgraph"], [("Agentic Course", "AI")])
+    result = await model_user_node({"user_id": user_id, "trigger_reason": "test"})
+
+    cm = result["cognitive_model"]
+    assert cm["stated_intents"] == ["agentic ai"]
+    assert cm["session_arc"]
 
     async with AsyncSessionLocal() as db:
-        row_result = await db.execute(
-            select(UserCognitiveModel).where(UserCognitiveModel.user_id == user_id)
-        )
-        row = row_result.scalar_one()
-        print(f"\nPersisted to DB — last_event_count_at_update: {row.last_event_count_at_update}")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        row = (await db.execute(
+            __import__("sqlalchemy").select(UserCognitiveModel).where(UserCognitiveModel.user_id == user_id)
+        )).scalar_one()
+        assert row.recent_searches == ["agentic ai", "langgraph"]
+        assert "AI" in row.recent_categories  # product-view category captured via SQL join
+        assert row.last_event_count_at_update == 3

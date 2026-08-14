@@ -1,80 +1,76 @@
-"""
-One-off smoke test for the retrieve node in isolation. Creates two
-products in different categories (dual-written to SQL + Chroma, same as
-the real products router does), then checks that retrieve_node correctly
-finds and filters candidates based on a synthetic cognitive model.
-"""
-import asyncio
-import uuid
+"""retrieve node — builds the embedding query, applies the metadata filter,
+and joins vector results back to real SQL products (grounding)."""
+import pytest
 
-from sqlalchemy import select
-
+from app.agent.nodes import retrieve as retrieve_mod
 from app.agent.nodes.retrieve import retrieve_node
 from app.db.session import AsyncSessionLocal
 from app.models.product import Product
-from app.services import llm_client, vector_store
+
+COGNITIVE_MODEL = {
+    "session_arc": "User explored agentic AI and LangGraph.",
+    "inferred_intents": ["building AI agents"],
+    "stated_intents": ["agentic ai"],
+    "category_affinity": ["AI"],
+    "recent_searches": [],
+    "recent_categories": [],
+}
 
 
-async def create_test_product(db, title: str, description: str, category: str, price: float) -> Product:
-    product = Product(
-        title=title, description=description, category=category, price=price,
-        vector_id=str(uuid.uuid4()),
-    )
-    db.add(product)
-    await db.flush()
+async def _seed_product(title, description, category, price):
+    from app.services import llm_client, vector_store
+    import uuid as _uuid
+    from tests.conftest import fake_embedding
 
-    embedding = await llm_client.get_embedding(product.to_embedding_text())
-    await vector_store.upsert_product(
-        vector_id=product.vector_id,
-        embedding=embedding,
-        document=product.to_embedding_text(),
-        metadata={"category": product.category, "price": product.price, "sql_id": product.id},
-    )
-    return product
-
-
-async def main():
+    product = Product(title=title, description=description, category=category, price=price,
+                      vector_id=str(_uuid.uuid4()))
     async with AsyncSessionLocal() as db:
-        ai_product = await create_test_product(
-            db, "Agentic AI Fundamentals",
-            "Learn to build reasoning agents with LangGraph and RAG pipelines.",
-            "AI", 49.99,
-        )
-        baking_product = await create_test_product(
-            db, "Introduction to Baking",
-            "Learn to bake bread and pastries at home.",
-            "Culinary", 19.99,
+        db.add(product)
+        await db.flush()
+        await vector_store.upsert_product(
+            vector_id=product.vector_id,
+            embedding=fake_embedding(product.to_embedding_text()),
+            document=product.to_embedding_text(),
+            metadata={"category": product.category, "price": product.price, "sql_id": product.id},
         )
         await db.commit()
-        print(f"Created products: {ai_product.title} (AI), {baking_product.title} (Culinary)")
+        return product.id
 
-    fake_state = {
-        "user_id": "test-user",
-        "cognitive_model": {
-            "session_arc": "User is exploring agentic AI and RAG systems.",
-            "inferred_intents": ["agentic AI", "RAG pipelines"],
-            "stated_intents": ["agentic ai"],
-            "category_affinity": ["AI"],
-        },
+
+def test_query_text_leads_with_recent_signals():
+    cm = {
+        "recent_searches": ["Kafka", "dbt"],
+        "recent_categories": ["Data Engineering"],
+        "session_arc": "arc",
+        "inferred_intents": ["data"],
+        "stated_intents": ["old interest"],
     }
-
-    print("\nRunning retrieve_node with category_affinity=['AI']...")
-    result = await retrieve_node(fake_state)
-
-    print(f"\nRetrieved {len(result['retrieved_candidates'])} candidate(s):")
-    for c in result["retrieved_candidates"]:
-        print(f"  - {c['title']} (category: {c['category']}, distance: {c['distance']:.4f})")
-
-    print("\nCleaning up test products...")
-    async with AsyncSessionLocal() as db:
-        for p in (ai_product, baking_product):
-            await vector_store.delete_product(p.vector_id)
-            db_product = await db.get(Product, p.id)
-            if db_product:
-                await db.delete(db_product)
-        await db.commit()
-    print("Cleanup complete.")
+    query = retrieve_mod._build_query_text(cm)
+    assert query.index("Kafka") < query.index("old interest")  # recency leads
+    assert "Data Engineering" in query
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+def test_metadata_filter_uses_recent_categories_first():
+    cm = {**COGNITIVE_MODEL, "recent_categories": ["Data Engineering"], "category_affinity": ["AI"]}
+    assert retrieve_mod._build_metadata_filter(cm) == {"category": "Data Engineering"}  # single category → scalar
+
+    cm2 = {**COGNITIVE_MODEL, "recent_categories": ["Data Engineering", "Data Science"], "category_affinity": ["AI"]}
+    assert retrieve_mod._build_metadata_filter(cm2) == {"category": {"$in": ["Data Engineering", "Data Science"]}}
+
+    assert retrieve_mod._build_metadata_filter({**COGNITIVE_MODEL, "recent_categories": []}) == {"category": "AI"}
+    assert retrieve_mod._build_metadata_filter({**COGNITIVE_MODEL, "recent_categories": [], "category_affinity": []}) is None
+
+
+@pytest.mark.asyncio
+async def test_retrieve_returns_sql_grounded_candidates():
+    ai_id = await _seed_product("Agentic AI Fundamentals", "LangGraph and RAG agent building", "AI", 49.99)
+    baking_id = await _seed_product("Intro to Baking", "bread and pastries at home", "Culinary", 19.99)
+
+    result = await retrieve_node({"user_id": "x", "cognitive_model": {**COGNITIVE_MODEL, "recent_categories": ["AI"]}})
+    titles = [c["title"] for c in result["retrieved_candidates"]]
+    assert "Agentic AI Fundamentals" in titles
+    assert "Intro to Baking" not in titles  # metadata filter excludes Culinary
+
+    candidates = {c["product_id"]: c for c in result["retrieved_candidates"]}
+    assert ai_id in candidates
+    assert candidates[ai_id]["price"] == 49.99  # real catalog data, not LLM output
