@@ -32,10 +32,16 @@ class Recommendation(Base):
     persuasion_strategy: Mapped[str] = mapped_column(String(120), default="")
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
 
-    # Step-by-step explanation for the transparency panel, and what the
-    # reflection node considered but rejected — purely for auditability.
+    # Step-by-step reasoning for the agent console (audit trail — never
+    # rendered to users), and what the reflection node considered but
+    # rejected — purely for auditability.
     reasoning_chain: Mapped[list] = mapped_column(JSON, default=list)
     alternatives_considered: Mapped[list] = mapped_column(JSON, default=list)
+
+    # User-safe "why am I seeing this" — deterministic facts derived from
+    # observable behavior (searches, categories viewed), never model
+    # chain-of-thought. Rendered by the recommendation UI.
+    behavior_explanation: Mapped[list] = mapped_column(JSON, default=list)
 
     trigger_reason: Mapped[str] = mapped_column(String(120), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -25,6 +25,13 @@ class Product(Base):
     category: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
 
+    # Store metadata: course level + seeded rating (see services/catalog_meta).
+    # NULL only for rows created before these columns existed; init_db()
+    # backfills them deterministically.
+    level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    rating: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rating_count: Mapped[int | None] = mapped_column(nullable=True)
+
     # Mirrors the ID used in the vector DB (Chroma) so the two stores can be
     # cross-referenced and reconciled.
     vector_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)

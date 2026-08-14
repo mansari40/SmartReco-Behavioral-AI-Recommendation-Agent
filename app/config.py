@@ -5,6 +5,7 @@ os.environ directly.
 """
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,17 +15,25 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # Database
-    database_url: str = "sqlite+aiosqlite:///./smartreco.db"
+    database_url: str = "sqlite+aiosqlite:///./upulse.db"
 
     # Auth
     secret_key: str = "dev-only-insecure-key"
     access_token_expire_minutes: int = 60 * 24
 
-    # LLM gateway (OpenAI-compatible) — currently OpenRouter
-    llm_api_key: str = ""
-    llm_base_url: str = "https://openrouter.ai/api/v1"
-    llm_chat_model: str = "meta-llama/llama-3.3-70b-instruct:free"
-    llm_embedding_model: str = "openai/text-embedding-3-small"
+    # LLM gateway (OpenRouter local/dev). Keep the provider/model configurable.
+    llm_api_key: str = Field(default="", env="OPENROUTER_API_KEY")
+    llm_base_url: str = Field(default="https://openrouter.ai/api/v1", env="OPENROUTER_BASE_URL")
+    llm_chat_model: str = Field(default="openrouter/free", env="OPENROUTER_MODEL")
+    llm_embedding_model: str = Field(default="openai/text-embedding-3-small", env="OPENROUTER_EMBEDDING_MODEL")
+
+    # Email / password reset
+    smtp_host: str = Field(default="", env="SMTP_HOST")
+    smtp_port: int = Field(default=587, env="SMTP_PORT")
+    smtp_user: str = Field(default="", env="SMTP_USER")
+    smtp_password: str = Field(default="", env="SMTP_PASSWORD")
+    smtp_from: str = Field(default="no-reply@upulse.ai", env="SMTP_FROM")
+    smtp_use_tls: bool = Field(default=True, env="SMTP_USE_TLS")
 
     # Vector store
     chroma_persist_dir: str = "./chroma_data"
@@ -33,7 +42,7 @@ class Settings(BaseSettings):
     # LangSmith (observability)
     langchain_tracing_v2: bool = False
     langchain_api_key: str = ""
-    langchain_project: str = "smartreco-agent"
+    langchain_project: str = "upulse-agent"
 
     mock_embeddings: bool = False
 

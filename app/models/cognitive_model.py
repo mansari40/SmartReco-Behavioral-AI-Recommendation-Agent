@@ -29,7 +29,7 @@ class PriceSensitivity(str, enum.Enum):
 class UserCognitiveModel(Base):
     """
     A persistent, evolving structured representation of what the agent
-    believes about a user — updated by an LLM call (via Mesh) after each
+    believes about a user — updated by an LLM call after each
     meaningful batch of events, not recomputed from scratch every time.
     This is what the `model_user` LangGraph node reads and writes.
     """
@@ -54,6 +54,13 @@ class UserCognitiveModel(Base):
     detected_objections: Mapped[list] = mapped_column(JSON, default=list)
     brand_affinity: Mapped[list] = mapped_column(JSON, default=list)
     category_affinity: Mapped[list] = mapped_column(JSON, default=list)
+
+    # Recency signals — the actual search strings and viewed categories from
+    # the user's most recent events, in chronological order (oldest first).
+    # Set deterministically from events (no LLM), so retrieval can weight
+    # "what the user is doing RIGHT NOW" over older accumulated interests.
+    recent_searches: Mapped[list] = mapped_column(JSON, default=list)
+    recent_categories: Mapped[list] = mapped_column(JSON, default=list)
 
     session_arc: Mapped[str] = mapped_column(Text, default="")
 

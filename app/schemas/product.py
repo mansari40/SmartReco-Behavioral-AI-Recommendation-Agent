@@ -26,6 +26,9 @@ class ProductOut(BaseModel):
     description: str
     category: str
     price: float
+    level: str | None
+    rating: float | None
+    rating_count: int | None
     sync_status: SyncStatus
     created_at: datetime
     updated_at: datetime

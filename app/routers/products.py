@@ -16,6 +16,7 @@ from app.models.product import Product, SyncStatus
 from app.routers.deps import require_admin
 from app.schemas.product import ProductCreate, ProductOut, ProductUpdate
 from app.services import llm_client, vector_store
+from app.services.catalog_meta import infer_level, seed_rating
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -27,20 +28,37 @@ async def _sync_to_vector_store(product: Product) -> tuple[SyncStatus, str | Non
             vector_id=product.vector_id,
             embedding=embedding,
             document=product.to_embedding_text(),
-            metadata={"category": product.category, "price": product.price, "sql_id": product.id},
+            metadata={
+                "category": product.category,
+                "price": product.price,
+                "sql_id": product.id,
+                "level": product.level,
+                "rating": product.rating,
+            },
         )
         return SyncStatus.SYNCED, None
     except Exception as exc:  # noqa: BLE001 — deliberately broad: any failure must surface, not vanish
         return SyncStatus.FAILED, str(exc)
 
 
+def _apply_store_metadata(product: Product, title_changed: bool = True) -> None:
+    """Level is content-derived from the title; rating is seeded once per
+    product id and kept stable afterwards."""
+    if title_changed or not product.level:
+        product.level = infer_level(product.title)
+    if product.rating is None:
+        rating, count = seed_rating(product.id)
+        product.rating, product.rating_count = rating, count
+
+
 @router.post("", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 async def create_product(
     payload: ProductCreate, db: AsyncSession = Depends(get_db), _admin=Depends(require_admin)
 ):
-    product = Product(**payload.model_dump(), vector_id=str(uuid.uuid4()))
+    product = Product(**payload.model_dump(), vector_id=str(uuid.uuid4()), sync_status=SyncStatus.PENDING)
     db.add(product)
     await db.flush()  # get product.id before the vector-store call, without committing yet
+    _apply_store_metadata(product)
 
     product.sync_status, product.sync_error = await _sync_to_vector_store(product)
 
@@ -74,8 +92,12 @@ async def update_product(
     if not product:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found")
 
+    title_changed = "title" in payload.model_dump(exclude_unset=True)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
+    _apply_store_metadata(product, title_changed=title_changed)
+    product.sync_status = SyncStatus.PENDING
+    product.sync_error = None
 
     # Re-embed on any edit — the text representation may have changed.
     product.sync_status, product.sync_error = await _sync_to_vector_store(product)
@@ -95,13 +117,11 @@ async def delete_product(
 
     try:
         await vector_store.delete_product(product.vector_id)
-    except Exception:  # noqa: BLE001
-        # Don't block the SQL delete on a vector-store hiccup, but this is
-        # exactly the kind of drift sync_status is meant to catch elsewhere —
-        # logged here so it's visible, not silent.
-        import logging
-
-        logging.getLogger(__name__).exception("Vector store delete failed for %s", product.vector_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            f"Failed to remove product from the vector store: {str(exc)}",
+        ) from exc
 
     await db.delete(product)
     await db.commit()

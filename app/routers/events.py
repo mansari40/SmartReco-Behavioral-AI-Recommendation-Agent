@@ -7,6 +7,7 @@ FastAPI background task — the request returns immediately either way,
 the agent (if triggered) runs after the response is already sent.
 """
 from fastapi import APIRouter, BackgroundTasks, Depends, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.runner import run_agent_for_user
@@ -16,6 +17,7 @@ from app.models.user import User
 from app.routers.deps import get_current_user
 from app.schemas.event import EventBatchIn
 from app.services import trigger_service
+from app.schemas.event import EventOut
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
@@ -46,3 +48,14 @@ async def ingest_events(
         background_tasks.add_task(run_agent_for_user, user.id, reason)
 
     return {"ingested": len(rows), "agent_triggered": should_run, "trigger_reason": reason}
+
+
+@router.get("/recent", response_model=list[EventOut])
+async def recent_events(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(Event)
+        .where(Event.user_id == user.id)
+        .order_by(Event.created_at.desc())
+        .limit(12)
+    )
+    return result.scalars().all()

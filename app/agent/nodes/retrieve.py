@@ -16,20 +16,47 @@ TOP_K = 10
 
 
 def _build_query_text(cognitive_model: dict) -> str:
-    """Turns the structured cognitive model into a single text query that
-    captures the user's interest, for embedding."""
-    parts = [
-        cognitive_model.get("session_arc", ""),
-        "Interests: " + ", ".join(cognitive_model.get("inferred_intents", [])),
-        "Searched for: " + ", ".join(cognitive_model.get("stated_intents", [])),
-    ]
+    """Turns the structured cognitive model into a single text query for
+    embedding. Recent behavior leads the query — what the user is doing
+    RIGHT NOW matters more than older accumulated interests — while older
+    stated intents still contribute so the query isn't blind to history."""
+    parts = []
+
+    recent_searches = cognitive_model.get("recent_searches", [])
+    if recent_searches:
+        parts.append("Recently searching for: " + ", ".join(recent_searches))
+
+    recent_categories = cognitive_model.get("recent_categories", [])
+    if recent_categories:
+        parts.append("Recently viewing courses in: " + ", ".join(recent_categories))
+
+    arc = cognitive_model.get("session_arc", "")
+    if arc:
+        parts.append(arc)
+
+    inferred = cognitive_model.get("inferred_intents", [])
+    if inferred:
+        parts.append("Interests: " + ", ".join(inferred))
+
+    stated = cognitive_model.get("stated_intents", [])
+    if stated:
+        parts.append("Also searched for: " + ", ".join(stated))
+
     return " ".join(p for p in parts if p)
 
 
 def _build_metadata_filter(cognitive_model: dict) -> dict | None:
     """Hybrid retrieval: narrow the semantic search to categories the user
-    has actually shown affinity for, when we have that signal. Falls back
-    to no filter (pure semantic search) if we don't yet know enough."""
+    has actually shown affinity for. Recency wins — categories viewed in the
+    most recent activity constrain the search first; older category affinity
+    is a fallback, not the default. Falls back to no filter (pure semantic
+    search) if we don't yet know enough."""
+    recent_categories = cognitive_model.get("recent_categories", [])
+    if recent_categories:
+        if len(recent_categories) == 1:
+            return {"category": recent_categories[0]}
+        return {"category": {"$in": recent_categories}}
+
     categories = cognitive_model.get("category_affinity", [])
     if not categories:
         return None
@@ -72,6 +99,9 @@ async def retrieve_node(state: AgentState) -> dict:
             "description": product.description,
             "category": product.category,
             "price": product.price,
+            "level": product.level,
+            "rating": product.rating,
+            "rating_count": product.rating_count,
             "distance": distance,
         })
 

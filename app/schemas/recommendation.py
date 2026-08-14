@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RecommendationOut(BaseModel):
@@ -12,5 +12,11 @@ class RecommendationOut(BaseModel):
     confidence: float
     reasoning_chain: list
     alternatives_considered: list
+    behavior_explanation: list = Field(default_factory=list)
     trigger_reason: str
+    feedback: str | None
     created_at: datetime
+
+
+class FeedbackIn(BaseModel):
+    feedback: str  # "up" or "down"

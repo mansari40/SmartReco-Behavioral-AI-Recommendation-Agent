@@ -6,13 +6,14 @@ downstream (retrieve, generate) reasons off this structured summary rather
 than raw events directly.
 """
 import json
+from collections import Counter
 
 from sqlalchemy import select
 
 from app.agent.state import AgentState
 from app.db.session import AsyncSessionLocal
 from app.models.cognitive_model import DecisionStage, PriceSensitivity
-from app.models.event import Event
+from app.models.event import Event, EventType
 from app.models.product import Product
 from app.services import llm_client
 from app.services.trigger_service import get_or_create_cognitive_model
@@ -48,15 +49,40 @@ async def _format_events_for_prompt(db, events: list[Event]) -> str:
         result = await db.execute(select(Product).where(Product.id.in_(product_ids)))
         products_by_id = {p.id: p for p in result.scalars().all()}
 
+    categories = []
+    search_queries = []
+    repeated_views = Counter()
+    total_time_spent = 0
+
     lines = []
     for e in events:
         detail = f"- {e.event_type.value}"
         if e.product_id and e.product_id in products_by_id:
             p = products_by_id[e.product_id]
             detail += f" on '{p.title}' (category: {p.category})"
+            if e.event_type == EventType.PRODUCT_VIEW:
+                categories.append(p.category)
+                repeated_views[p.title] += 1
+        if e.event_type == EventType.SEARCH and e.event_metadata.get("query"):
+            query = e.event_metadata["query"].strip()
+            search_queries.append(query)
+        if e.event_type == EventType.TIME_SPENT:
+            total_time_spent += int(e.event_metadata.get("seconds", 0) or 0)
         if e.event_metadata:
             detail += f" | metadata: {json.dumps(e.event_metadata)}"
         lines.append(detail)
+
+    if search_queries:
+        lines.append(f"- recent search queries: {', '.join(dict.fromkeys(search_queries))}")
+    if categories:
+        top_categories = [c for c, _ in Counter(categories).most_common(3)]
+        lines.append(f"- category affinity signals: {', '.join(top_categories)}")
+    repeated = [title for title, count in repeated_views.items() if count > 1]
+    if repeated:
+        lines.append(f"- repeated interest in: {', '.join(repeated)}")
+    if total_time_spent:
+        lines.append(f"- total page engagement: {round(total_time_spent / 60, 1)} minutes")
+
     return "\n".join(lines) if lines else "(no events)"
 
 
@@ -93,6 +119,24 @@ def _safe_parse_cognitive_update(raw: str, fallback: dict) -> dict:
     return result
 
 
+async def _extract_recent_signals(events: list[Event], products_by_id: dict) -> tuple[list[str], list[str]]:
+    """Deterministic recency extraction — no LLM. Returns (recent_searches,
+    recent_categories) in chronological order (oldest first), so retrieval
+    can favor the user's most current intent over accumulated history."""
+    recent_searches = [
+        e.event_metadata.get("query", "").strip()
+        for e in events
+        if e.event_type == EventType.SEARCH and e.event_metadata.get("query", "").strip()
+    ]
+    recent_categories = []
+    for e in events:
+        if e.event_type == EventType.PRODUCT_VIEW and e.product_id:
+            p = products_by_id.get(e.product_id)
+            if p and p.category not in recent_categories:
+                recent_categories.append(p.category)
+    return recent_searches[-5:], recent_categories[-3:]
+
+
 async def model_user_node(state: AgentState) -> dict:
     user_id = state["user_id"]
 
@@ -109,6 +153,14 @@ async def model_user_node(state: AgentState) -> dict:
         total_event_count = len(events)  # approximation; fine for the trigger's purposes
 
         events_text = await _format_events_for_prompt(db, events)
+
+        product_ids = {e.product_id for e in events if e.product_id}
+        products_by_id: dict[str, Product] = {}
+        if product_ids:
+            result = await db.execute(select(Product).where(Product.id.in_(product_ids)))
+            products_by_id = {p.id: p for p in result.scalars().all()}
+
+        recent_searches, recent_categories = await _extract_recent_signals(events, products_by_id)
 
         current_profile = {
             "stated_intents": model.stated_intents,
@@ -146,9 +198,14 @@ async def model_user_node(state: AgentState) -> dict:
         model.detected_objections = updated["detected_objections"]
         model.brand_affinity = updated["brand_affinity"]
         model.category_affinity = updated["category_affinity"]
+        model.recent_searches = recent_searches
+        model.recent_categories = recent_categories
         model.session_arc = updated["session_arc"]
         model.last_event_count_at_update = total_event_count
 
         await db.commit()
+
+        updated["recent_searches"] = recent_searches
+        updated["recent_categories"] = recent_categories
 
         return {"cognitive_model": updated}

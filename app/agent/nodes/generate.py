@@ -1,3 +1,4 @@
+
 """
 generate node: selects a persuasion strategy deterministically from the
 cognitive model (not an LLM guess — this is what makes the "why this
@@ -76,6 +77,61 @@ Return ONLY a JSON object with this exact shape, no other text:
 }}"""
 
 
+def _enrich_products(product_reasons: list[dict], filtered_candidates: list[dict]) -> list[dict]:
+    """The LLM only ever returns {product_id, reason} — everything else
+    (title/price/category) comes from our own retrieved candidates, never
+    the model's output, so the UI always has real catalog data to render
+    even if the LLM's JSON is sparse or slightly malformed. Any product_id
+    the LLM invents that isn't a real candidate is dropped rather than
+    shown with blank fields. Duplicate product_ids are collapsed into the
+    first entry so the UI never shows the same course twice."""
+    by_id = {c["product_id"]: c for c in filtered_candidates}
+    seen: set[str] = set()
+    enriched = []
+
+    def _match_score(candidate: dict) -> float:
+        distance = candidate.get("distance")
+        if distance is None:
+            return 0.0
+        return max(0.0, min(1.0, 1.0 - float(distance)))
+
+    for entry in product_reasons:
+        pid = entry.get("product_id") if isinstance(entry, dict) else None
+        candidate = by_id.get(pid)
+        if not candidate or pid in seen:
+            continue
+        seen.add(pid)
+        enriched.append({
+            "product_id": pid,
+            "title": candidate["title"],
+            "price": candidate["price"],
+            "category": candidate["category"],
+            "level": candidate.get("level"),
+            "rating": candidate.get("rating"),
+            "rating_count": candidate.get("rating_count"),
+            "score": _match_score(candidate),
+            "reason": entry.get("reason") or candidate["title"],
+        })
+    for candidate in filtered_candidates:
+        if len(enriched) >= 2:
+            break
+        if candidate["product_id"] in seen:
+            continue
+        seen.add(candidate["product_id"])
+        enriched.append({
+            "product_id": candidate["product_id"],
+            "title": candidate["title"],
+            "price": candidate["price"],
+            "category": candidate["category"],
+            "level": candidate.get("level"),
+            "rating": candidate.get("rating"),
+            "rating_count": candidate.get("rating_count"),
+            "score": _match_score(candidate),
+            "reason": candidate["title"],
+        })
+    return enriched
+
+
 def _safe_parse_generation(raw: str, filtered_candidates: list[dict]) -> dict:
     fallback_products = [{"product_id": c["product_id"], "reason": c["title"]} for c in filtered_candidates]
     try:
@@ -99,6 +155,34 @@ def _safe_parse_generation(raw: str, filtered_candidates: list[dict]) -> dict:
             "product_reasons": fallback_products,
             "reasoning_chain": ["fallback: generation response could not be parsed"],
         }
+
+
+def _build_behavior_explanation(cognitive_model: dict, recommended_products: list[dict]) -> list[str]:
+    """User-safe 'why am I seeing this' — deterministic facts derived from
+    observable behavior only. Never model chain-of-thought."""
+    lines = []
+
+    recent_searches = [s for s in cognitive_model.get("recent_searches", []) if s]
+    if recent_searches:
+        joined = ", ".join(recent_searches[-3:])
+        lines.append(f"You searched for “{joined}”.")
+
+    recent_categories = [c for c in cognitive_model.get("recent_categories", []) if c]
+    if recent_categories:
+        joined = ", ".join(recent_categories)
+        lines.append(f"You've been exploring {joined} courses.")
+
+    inferred = [i for i in cognitive_model.get("inferred_intents", []) if i]
+    if inferred and len(lines) < 2:
+        lines.append(f"Your activity points toward {', '.join(inferred[:2])}.")
+
+    if recommended_products:
+        names = ", ".join(p["title"] for p in recommended_products[:2])
+        lines.append(f"These courses are the closest match to what you've been engaging with.")
+
+    if not lines:
+        lines.append("Recommendations are based on your recent browsing activity.")
+    return lines
 
 
 async def generate_node(state: AgentState) -> dict:
@@ -142,13 +226,15 @@ async def generate_node(state: AgentState) -> dict:
     )
 
     parsed = _safe_parse_generation(raw_reply, filtered_candidates)
+    recommended_products = _enrich_products(parsed["product_reasons"], filtered_candidates)
 
     avg_relevance = sum(c["relevance_score"] for c in filtered_candidates) / len(filtered_candidates)
 
     return {
         "narrative": parsed["narrative"],
-        "recommended_products": parsed["product_reasons"],
+        "recommended_products": recommended_products,
         "persuasion_strategy": strategy_name,
         "confidence": round(avg_relevance, 2),
         "reasoning_chain": parsed["reasoning_chain"],
+        "behavior_explanation": _build_behavior_explanation(cognitive_model, recommended_products),
     }

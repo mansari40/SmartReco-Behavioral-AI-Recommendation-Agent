@@ -30,6 +30,7 @@ async def store_node(state: AgentState) -> dict:
             confidence=state.get("confidence", 0.0),
             reasoning_chain=state.get("reasoning_chain", []),
             alternatives_considered=state.get("alternatives_considered", []),
+            behavior_explanation=state.get("behavior_explanation", []),
             trigger_reason=state.get("trigger_reason", ""),
             is_active=True,
         )

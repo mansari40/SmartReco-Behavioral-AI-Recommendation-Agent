@@ -28,6 +28,7 @@ class AgentState(TypedDict, total=False):
     confidence: float
     reasoning_chain: list[str]
     alternatives_considered: list[str]
+    behavior_explanation: list[str]  # user-safe explanation, built from observable behavior
 
     # populated by reflect node
     should_regenerate: bool
