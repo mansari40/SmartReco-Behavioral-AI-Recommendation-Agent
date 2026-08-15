@@ -1,56 +1,49 @@
 """
-evaluate node: scores each retrieved candidate against the user's
-cognitive model, answering "would this actually convince THIS user" —
-not just "is this semantically similar" (that's already been handled by
-retrieve). One LLM call scores all candidates together, not one call per
-candidate, to stay within the efficiency requirement.
+evaluate node: scores each retrieved candidate against the user's cognitive
+model, answering "would this actually convince THIS user" — not just "is
+this semantically similar" (that's already been handled by retrieve).
+
+Deterministic — no LLM call — so the agent makes exactly one generation call
+per run (the generate node). Scoring blends the semantic similarity the
+vector store already computed (from the distance) with deterministic signals
+from the cognitive model: category affinity and inferred-intent keyword
+overlap. This keeps the full agentic pipeline but moves scoring out of the
+LLM, cutting a redundant call and its latency.
 """
-import json
-
 from app.agent.state import AgentState
-from app.services import llm_client
-
-SYSTEM_PROMPT = """You are evaluating product candidates for a specific user, based on
-their behavioral profile. For each candidate, judge how well it actually
-fits this user's demonstrated interest and readiness — not just topical
-similarity.
-
-Return ONLY a JSON object with this exact shape, no other text:
-{
-  "scores": [
-    {"product_id": "...", "relevance_score": float 0.0-1.0, "reasoning": "one sentence"}
-  ]
-}
-
-Score based on: does this match their inferred intents (not just stated
-ones)? Does it fit their decision stage? Would it plausibly address any
-detected objections? A topically-similar product that ignores their
-decision stage or objections should score lower than one that fits both."""
 
 
-def _safe_parse_scores(raw: str, candidate_ids: set[str]) -> dict[str, dict]:
-    """Returns {product_id: {"relevance_score": float, "reasoning": str}}.
-    Falls back to a neutral 0.5 score for any candidate the LLM didn't
-    return a valid entry for, rather than dropping it silently."""
-    scores: dict[str, dict] = {}
+def _similarity(candidate: dict) -> float:
+    """Semantic similarity derived from the vector-store distance
+    (0 = identical, 1 = orthogonal). Candidates without a distance get a
+    neutral 0.5 so nothing is silently dropped."""
+    distance = candidate.get("distance")
+    if distance is None:
+        return 0.5
     try:
-        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        data = json.loads(cleaned)
-        for entry in data.get("scores", []):
-            pid = entry.get("product_id")
-            score = entry.get("relevance_score")
-            if pid in candidate_ids and isinstance(score, (int, float)):
-                scores[pid] = {
-                    "relevance_score": max(0.0, min(1.0, float(score))),
-                    "reasoning": entry.get("reasoning", ""),
-                }
-    except (json.JSONDecodeError, AttributeError, TypeError):
-        pass  # fall through to defaults below
+        return max(0.0, min(1.0, 1.0 - float(distance)))
+    except (TypeError, ValueError):
+        return 0.5
 
-    for pid in candidate_ids:
-        scores.setdefault(pid, {"relevance_score": 0.5, "reasoning": "no evaluation returned"})
 
-    return scores
+def _category_bonus(candidate: dict, cognitive_model: dict) -> float:
+    """+0.15 when the candidate's category is one the user has actually
+    engaged with (recent views or accumulated category affinity)."""
+    categories = set(cognitive_model.get("recent_categories", [])) | set(
+        cognitive_model.get("category_affinity", [])
+    )
+    return 0.15 if candidate.get("category") in categories else 0.0
+
+
+def _intent_bonus(candidate: dict, cognitive_model: dict) -> float:
+    """+0.1 per inferred intent whose keywords appear in the candidate's
+    title/description, capped at +0.3."""
+    text = f"{candidate.get('title', '')} {candidate.get('description', '')}".lower()
+    overlap = 0
+    for intent in cognitive_model.get("inferred_intents", []):
+        if isinstance(intent, str) and intent.strip() and intent.lower() in text:
+            overlap += 1
+    return min(overlap * 0.1, 0.3)
 
 
 async def evaluate_node(state: AgentState) -> dict:
@@ -59,37 +52,25 @@ async def evaluate_node(state: AgentState) -> dict:
         return {"evaluated_candidates": []}
 
     cognitive_model = state["cognitive_model"]
-    candidate_ids = {c["product_id"] for c in candidates}
-
-    candidates_text = "\n".join(
-        f"- product_id: {c['product_id']}, title: {c['title']}, "
-        f"category: {c['category']}, description: {c['description']}"
-        for c in candidates
-    )
-
-    user_prompt = (
-        f"USER PROFILE:\n{json.dumps(cognitive_model, indent=2)}\n\n"
-        f"CANDIDATES:\n{candidates_text}"
-    )
-
-    raw_reply = await llm_client.chat_completion(
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-        response_format_json=True,
-        temperature=0.3,
-    )
-
-    scores = _safe_parse_scores(raw_reply, candidate_ids)
 
     evaluated = []
     for c in candidates:
-        score_info = scores[c["product_id"]]
+        similarity = _similarity(c)
+        category_bonus = _category_bonus(c, cognitive_model)
+        intent_bonus = _intent_bonus(c, cognitive_model)
+        score = max(0.0, min(1.0, similarity + category_bonus + intent_bonus))
+
+        sources = []
+        if category_bonus:
+            sources.append(c.get("category", "your recent interests"))
+        if intent_bonus:
+            sources.append("your inferred interests")
+        reason = "topically similar to your activity" if not sources else "matches " + ", ".join(sources)
+
         evaluated.append({
             **c,
-            "relevance_score": score_info["relevance_score"],
-            "evaluation_reasoning": score_info["reasoning"],
+            "relevance_score": round(score, 3),
+            "evaluation_reasoning": reason,
         })
 
     evaluated.sort(key=lambda c: c["relevance_score"], reverse=True)

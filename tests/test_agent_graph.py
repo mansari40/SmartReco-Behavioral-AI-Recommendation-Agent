@@ -76,9 +76,12 @@ async def test_full_graph_runs_and_persists_grounded_recommendation(fake_llm):
         db_ids = set((await db.execute(select(Product.id))).scalars().all())
         assert ids <= db_ids  # nothing invented
 
-    # mocked LLM made a bounded number of calls (model_user, evaluate,
-    # generate, reflect — no runaway regeneration loop)
-    assert fake_llm.chat_calls <= 8
+    # the agent's normal path makes exactly 3 AI calls: 2 chat (model_user,
+    # generate) + 1 embedding (retrieve). The adaptive retry reuses the same
+    # embedding and the deterministic nodes make no calls at all.
+    assert fake_llm.chat_calls == 2
+    assert fake_llm.embedding_calls == 1
+    assert fake_llm.chat_calls + fake_llm.embedding_calls == 3
 
 
 @pytest.mark.asyncio
@@ -97,3 +100,40 @@ async def test_agent_is_idempotent_across_runs(fake_llm):
         )).scalars().all()
         assert len(active) == 1
         assert active[0].trigger_reason == "run 2"
+
+
+@pytest.mark.asyncio
+async def test_adaptive_retrieval_retries_on_poor_quality(fake_llm, monkeypatch):
+    """Poor retrieval quality (weak best similarity) with an applied category
+    filter must route through the deterministic relax retry."""
+    user_id = await _seed_catalog_and_user()
+
+    from app.agent.nodes import retrieve as retrieve_mod
+
+    monkeypatch.setattr(retrieve_mod, "_best_similarity", lambda candidates: 0.0)
+
+    final_state = await agent_graph.ainvoke({"user_id": user_id, "trigger_reason": "poor quality"})
+
+    assert final_state.get("retrieval_quality") == "low"
+    assert final_state.get("retrieval_adjusted") is True
+    # still a fully grounded, persisted recommendation — and still only 3 AI calls
+    assert final_state.get("narrative")
+    assert fake_llm.chat_calls == 2
+    assert fake_llm.embedding_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_adaptive_retrieval_skips_retry_on_good_quality(fake_llm, monkeypatch):
+    """Good retrieval quality flows straight through — no retry, no adjustment."""
+    user_id = await _seed_catalog_and_user()
+
+    from app.agent.nodes import retrieve as retrieve_mod
+
+    monkeypatch.setattr(retrieve_mod, "_best_similarity", lambda candidates: 0.9)
+
+    final_state = await agent_graph.ainvoke({"user_id": user_id, "trigger_reason": "good quality"})
+
+    assert final_state.get("retrieval_quality") == "good"
+    assert final_state.get("retrieval_adjusted") is not True
+    assert fake_llm.chat_calls == 2
+    assert fake_llm.embedding_calls == 1

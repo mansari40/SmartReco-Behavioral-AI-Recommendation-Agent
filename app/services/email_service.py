@@ -10,8 +10,7 @@ def send_password_reset_email(user) -> None:
         return
 
     token = create_password_reset_token(user.id)
-    base_url = 'http://localhost:8000' if settings.environment == 'development' else ''
-    reset_url = f"{base_url}/password-reset?token={token}"
+    reset_url = f"{settings.public_base_url.rstrip('/')}/password-reset?token={token}"
     body = f"Hi {user.first_name or user.email},\n\n" \
            "We received a request to reset your SmartReco password. " \
            "Click the link below to choose a new password:\n\n" \

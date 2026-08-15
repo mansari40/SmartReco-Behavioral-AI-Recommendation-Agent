@@ -24,8 +24,11 @@ _client = AsyncOpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_k
 # Only retry errors that are plausibly transient. A 400/404 (bad model
 # name, malformed request) will fail identically on every retry — retrying
 # those just burns quota and time for a guaranteed-to-fail call. 429 (rate
-# limit) and 5xx (server-side) are worth retrying; everything else isn't.
-_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+# limit / daily quota exhausted) is deliberately NOT retried: once OpenRouter
+# says the quota is used up, retrying just amplifies one failed call into
+# 3 requests and hammers the gateway without any chance of recovery. 5xx and
+# network errors are server-side/transient and stay retryable.
+_RETRYABLE_STATUS_CODES = {500, 502, 503, 504}
 
 
 def _is_retryable(exc: BaseException) -> bool:

@@ -8,7 +8,7 @@ than raw events directly.
 import json
 from collections import Counter
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.agent.state import AgentState
 from app.db.session import AsyncSessionLocal
@@ -153,7 +153,16 @@ async def model_user_node(state: AgentState) -> dict:
         # Sort chronologically (oldest first). A stable sort keeps insertion
         # order intact when events share the same created_at timestamp.
         events.sort(key=lambda e: e.created_at)
-        total_event_count = len(events)  # approximation; fine for the trigger's purposes
+        # The prompt only uses the most recent MAX_EVENTS_CONSIDERED events,
+        # but the trigger's "new events" bookkeeping must count ALL events
+        # processed so far — otherwise a user with more than 50 events would
+        # never see new_events reset and would re-trigger the agent on every
+        # batch. Query the real total, not the capped list length.
+        total_event_count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(Event.user_id == user_id)
+            )
+        ).scalar_one()
 
         events_text = await _format_events_for_prompt(db, events)
 

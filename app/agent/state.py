@@ -16,6 +16,12 @@ class AgentState(TypedDict, total=False):
 
     # populated by retrieve node
     retrieved_candidates: list[dict]  # raw Chroma query results, normalized
+    query_embedding: list[float]      # computed by retrieve, reused by a relax retry
+    retrieval_filter_applied: bool    # whether a category metadata filter was used
+
+    # populated by assess/retry nodes (deterministic adaptive retrieval)
+    retrieval_quality: str  # "good" | "low" — deterministic quality decision
+    retrieval_adjusted: bool  # True if the filter-relaxing retry ran
 
     # populated by evaluate/filter nodes
     evaluated_candidates: list[dict]  # candidates scored against the cognitive model

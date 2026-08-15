@@ -1,11 +1,19 @@
 """retrieve node — builds the embedding query, applies the metadata filter,
-and joins vector results back to real SQL products (grounding)."""
+and joins vector results back to real SQL products (grounding). Also covers
+the deterministic adaptive-retrieval gate (assess) and the filter-relaxing
+retry that reuses the already-computed embedding."""
 import pytest
 
 from app.agent.nodes import retrieve as retrieve_mod
-from app.agent.nodes.retrieve import retrieve_node
+from app.agent.nodes.retrieve import (
+    retrieve_node,
+    assess_retrieval_node,
+    retry_retrieve_node,
+)
 from app.db.session import AsyncSessionLocal
 from app.models.product import Product
+from app.services import vector_store
+from tests.conftest import fake_embedding
 
 COGNITIVE_MODEL = {
     "session_arc": "User explored agentic AI and LangGraph.",
@@ -74,3 +82,60 @@ async def test_retrieve_returns_sql_grounded_candidates():
     candidates = {c["product_id"]: c for c in result["retrieved_candidates"]}
     assert ai_id in candidates
     assert candidates[ai_id]["price"] == 49.99  # real catalog data, not LLM output
+
+
+def test_query_text_falls_back_to_neutral_query():
+    assert retrieve_mod._build_query_text({}) == ""
+    assert retrieve_mod.DEFAULT_QUERY_TEXT  # retrieve_node must never embed an empty string
+
+
+def test_quality_gate_is_deterministic():
+    assert retrieve_mod._best_similarity([]) == 0.0
+    assert retrieve_mod._best_similarity([{"distance": 0.1}, {"distance": 0.5}]) == 0.9
+    assert retrieve_mod._best_similarity([{"distance": 1.5}]) == 0.0  # clamped to [0, 1]
+    assert retrieve_mod._quality([{"distance": 0.1}, {"distance": 0.2}]) == "good"
+    assert retrieve_mod._quality([{"distance": 1.5}, {"distance": 0.9}]) == "low"
+    assert retrieve_mod._quality([]) == "low"
+
+
+@pytest.mark.asyncio
+async def test_assess_marks_quality_without_llm():
+    assert (await assess_retrieval_node(
+        {"retrieved_candidates": [{"distance": 0.1}, {"distance": 0.2}]}
+    ))["retrieval_quality"] == "good"
+    assert (await assess_retrieval_node({"retrieved_candidates": []}))["retrieval_quality"] == "low"
+    assert (await assess_retrieval_node(
+        {"retrieved_candidates": [{"distance": 1.2}]}
+    ))["retrieval_quality"] == "low"
+
+
+@pytest.mark.asyncio
+async def test_retry_relaxes_filter_and_reuses_embedding(fake_llm, monkeypatch):
+    """The adaptive retry must re-query with NO filter and the EXACT same
+    embedding retrieved already — a deterministic adjustment with zero extra
+    embedding/chat calls."""
+    await _seed_product("Agentic AI Fundamentals", "LangGraph and RAG agent building", "AI", 49.99)
+    await _seed_product("Intro to Baking", "bread and pastries at home", "Culinary", 19.99)
+
+    calls = []
+    original_query = vector_store.query
+
+    async def fake_query(embedding, top_k=10, where=None):
+        calls.append({"embedding": embedding, "where": where})
+        return await original_query(embedding, top_k=top_k, where=where)
+
+    monkeypatch.setattr(vector_store, "query", fake_query)
+
+    # Query with a real product's own embedding: the self-match (distance 0)
+    # is guaranteed to rank first, so grounding is deterministic even with
+    # orphaned vectors from earlier tests in the shared Chroma collection.
+    embedding = fake_embedding("Agentic AI Fundamentals. Category: AI. LangGraph and RAG agent building")
+    result = await retry_retrieve_node({"query_embedding": embedding})
+
+    assert len(calls) == 1
+    assert calls[0]["where"] is None  # filter relaxed
+    assert calls[0]["embedding"] == embedding  # embedding reused, not recomputed
+    assert result["retrieval_adjusted"] is True
+    titles = [c["title"] for c in result["retrieved_candidates"]]
+    assert "Agentic AI Fundamentals" in titles
+    assert "Intro to Baking" in titles  # no filter -> both categories are reachable

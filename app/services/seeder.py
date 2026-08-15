@@ -81,10 +81,11 @@ async def ensure_admin() -> None:
 
 async def seed_catalog() -> dict:
     """Ensure the canonical 52 courses exist with embeddings. Idempotent:
-    existing courses are left untouched, and only courses whose embedding is
-    missing are embedded. sync_status alone is not trusted — a course marked
-    SYNCED against a previous store (e.g. old Chroma) but absent from the
-    active vector store is re-embedded."""
+    existing courses are left untouched, and a course is embedded only if
+    its vector is actually missing from the active vector store — an
+    existing embedding is reused on every subsequent boot (no re-embed cost).
+    sync_status alone is not trusted: a course marked PENDING but already
+    present in the store (e.g. after a store migration) is not re-embedded."""
     stats = {"total": len(CATALOG), "created": 0, "embedded": 0, "skipped": 0, "failed": 0}
 
     async with AsyncSessionLocal() as db:
@@ -114,7 +115,9 @@ async def seed_catalog() -> dict:
                 product.level = infer_level(product.title)
                 product.rating, product.rating_count = seed_rating(product.id)
 
-            if product.sync_status == SyncStatus.SYNCED and await vector_store.product_exists(product.vector_id):
+            if await vector_store.product_exists(product.vector_id):
+                product.sync_status = SyncStatus.SYNCED
+                product.sync_error = None
                 stats["skipped"] += 1
                 continue
 

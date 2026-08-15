@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     smtp_from: str = Field(default="no-reply@upulse.ai", env="SMTP_FROM")
     smtp_use_tls: bool = Field(default=True, env="SMTP_USE_TLS")
 
+    # Public base URL used to build absolute links in transactional emails
+    # (e.g. password reset). On Render this is injected automatically from the
+    # service URL; locally it defaults to the dev server.
+    public_base_url: str = Field(default="http://localhost:8000", env="PUBLIC_BASE_URL")
+
     # Vector store
     chroma_persist_dir: str = "./chroma_data"
     chroma_collection: str = "products"

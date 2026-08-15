@@ -1,9 +1,9 @@
 # Render Blueprint for UPulse.
 #
 # Start command is codified here (Render uses startCommand over a Procfile
-# when render.yaml is present) per AGENTS.md: the app must bind 0.0.0.0 and
-# honor Render's $PORT. No manual seed/promote steps are required — the app
-# bootstraps schema, admin, 52 courses, and pgvector embeddings on startup.
+# when render.yaml is present): the app must bind 0.0.0.0 and honor Render's
+# $PORT. No manual seed/promote steps are required — the app bootstraps
+# schema, admin, 52 courses, and pgvector embeddings on startup.
 
 services:
   - type: web
@@ -35,6 +35,11 @@ services:
         value: "4096"
       - key: MOCK_EMBEDDINGS
         value: "false"
+      - key: PUBLIC_BASE_URL
+        fromService:
+          name: upulse
+          type: web
+          property: url
       - key: DATABASE_URL
         fromDatabase:
           name: upulse-db
