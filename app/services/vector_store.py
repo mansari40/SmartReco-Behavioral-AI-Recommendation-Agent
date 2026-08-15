@@ -1,16 +1,11 @@
 """
 Thin async-friendly wrapper around a local persistent ChromaDB collection.
-Chroma's client is sync, so calls are pushed to a thread via asyncio.to_thread
-to keep this non-blocking inside FastAPI's async routes.
-
-Products are dual-written here from app/routers/products.py (next step):
-SQL row first, then this store. Failures here should NOT be swallowed —
-the caller is responsible for recording sync_status/sync_error on the
-Product row based on what this module raises.
+...
 """
 import sys
 import types
 
+print("[VECSTORE CHECKPOINT] vector_store.py starting", flush=True)
 
 if "onnxruntime" not in sys.modules:
     sys.modules["onnxruntime"] = types.ModuleType("onnxruntime")
@@ -20,7 +15,10 @@ import os
 
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
 
+print("[VECSTORE CHECKPOINT] about to import chromadb", flush=True)
 import chromadb
+print("[VECSTORE CHECKPOINT] chromadb imported successfully", flush=True)
+
 from chromadb.config import Settings as ChromaSettings
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
@@ -28,10 +26,6 @@ from app.config import settings
 
 
 class _NoOpEmbeddingFunction(EmbeddingFunction):
-    """This app always supplies embeddings explicitly (via OpenRouter) on
-    every upsert/query call, so Chroma's own embedding function is never
-    invoked. This stub exists only to satisfy Chroma's API requirement
-    that a collection have an embedding_function."""
     def __call__(self, input: Documents) -> Embeddings:
         raise RuntimeError(
             "vector_store's collection should never be asked to embed text itself — "
@@ -39,14 +33,17 @@ class _NoOpEmbeddingFunction(EmbeddingFunction):
         )
 
 
+print("[VECSTORE CHECKPOINT] about to create PersistentClient", flush=True)
 _client = chromadb.PersistentClient(
     path=settings.chroma_persist_dir,
     settings=ChromaSettings(anonymized_telemetry=False),
 )
+print("[VECSTORE CHECKPOINT] PersistentClient created, about to get_or_create_collection", flush=True)
 _collection = _client.get_or_create_collection(
     name=settings.chroma_collection,
     embedding_function=_NoOpEmbeddingFunction(),
 )
+print("[VECSTORE CHECKPOINT] collection ready", flush=True)
 
 
 def _upsert_sync(vector_id: str, embedding: list[float], document: str, metadata: dict) -> None:
@@ -75,6 +72,4 @@ async def delete_product(vector_id: str) -> None:
 
 
 async def query(embedding: list[float], top_k: int = 10, where: dict | None = None) -> dict:
-    """`where` enables metadata filtering (e.g. category, price range) for
-    hybrid retrieval — used by the agent's retrieve node later on."""
     return await asyncio.to_thread(_query_sync, embedding, top_k, where)
