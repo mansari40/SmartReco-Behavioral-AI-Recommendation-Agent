@@ -10,7 +10,8 @@ import sys
 import urllib.error
 import urllib.request
 
-BASE_URL = "http://localhost:8000"
+import os
+BASE_URL = os.environ.get("SEED_TARGET_URL", "http://localhost:8000")
 
 
 CATALOG = [
