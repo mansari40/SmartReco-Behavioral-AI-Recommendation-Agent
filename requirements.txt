@@ -29,6 +29,7 @@ langsmith==0.2.10
 
 # Vector DB 
 chromadb==0.5.4
+onnxruntime==1.17.3
 
 # Scheduling 
 apscheduler==3.11.0
