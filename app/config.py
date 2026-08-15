@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     llm_base_url: str = Field(default="https://openrouter.ai/api/v1", env="OPENROUTER_BASE_URL")
     llm_chat_model: str = Field(default="openrouter/free", env="OPENROUTER_MODEL")
     llm_embedding_model: str = Field(default="openai/text-embedding-3-small", env="OPENROUTER_EMBEDDING_MODEL")
+    llm_max_tokens: int = Field(default=4096, env="OPENROUTER_MAX_TOKENS")
 
     # Email / password reset
     smtp_host: str = Field(default="", env="SMTP_HOST")

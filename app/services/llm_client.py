@@ -108,6 +108,7 @@ async def _chat_once(messages: list[dict], model: str, temperature: float, json_
             model=model,
             messages=messages,
             temperature=temperature,
+            max_tokens=settings.llm_max_tokens,
             **kwargs,
         )
         if not response.choices or not response.choices[0].message or not response.choices[0].message.content:
