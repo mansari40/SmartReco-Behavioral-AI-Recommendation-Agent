@@ -13,13 +13,11 @@ from app.config import settings
 from app.db.base import init_db
 from app.routers import auth, console, events, pages, products, recommendations
 from app.services.scheduler import start_scheduler, stop_scheduler
-from scripts.seed_products import seed_products_if_empty  # placeholder — will confirm exact import path once seed_products.py is shared
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    await seed_products_if_empty()
     start_scheduler()
     yield
     stop_scheduler()
