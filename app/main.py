@@ -2,6 +2,7 @@
 App entrypoint. Wires up routers, DB init, CORS, templates, static files,
 and the background scheduler.
 """
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,11 +14,19 @@ from app.config import settings
 from app.db.base import init_db
 from app.routers import auth, console, events, pages, products, recommendations
 from app.services.scheduler import start_scheduler, stop_scheduler
+from app.services.seeder import ensure_admin, seed_catalog
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Idempotent startup bootstrap: schema -> admin -> 52 courses ->
+    # course embeddings. Safe on every boot; never duplicates anything.
     await init_db()
+    await ensure_admin()
+    seed_stats = await seed_catalog()
+    logger.info("Startup bootstrap complete: %s", seed_stats)
     start_scheduler()
     yield
     stop_scheduler()

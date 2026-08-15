@@ -149,7 +149,10 @@ async def model_user_node(state: AgentState) -> dict:
             .order_by(Event.created_at.desc())
             .limit(MAX_EVENTS_CONSIDERED)
         )
-        events = list(reversed(events_result.scalars().all()))
+        events = list(events_result.scalars().all())
+        # Sort chronologically (oldest first). A stable sort keeps insertion
+        # order intact when events share the same created_at timestamp.
+        events.sort(key=lambda e: e.created_at)
         total_event_count = len(events)  # approximation; fine for the trigger's purposes
 
         events_text = await _format_events_for_prompt(db, events)

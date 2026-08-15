@@ -7,11 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.routers.deps import get_current_user
 from app.schemas.user import Token, UserCreate, UserOut
 from app.services.email_service import send_password_reset_email
-from app.config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -80,25 +79,3 @@ async def reset_password(payload: dict[str, str], db: AsyncSession = Depends(get
 @router.get("/me", response_model=UserOut)
 async def me(user: User = Depends(get_current_user)):
     return user
-
-
-@router.post("/promote-to-admin", status_code=status.HTTP_200_OK)
-async def promote_to_admin(payload: dict[str, str], db: AsyncSession = Depends(get_db)):
-    """TEMPORARY, ONE-TIME-USE endpoint to bootstrap the first admin account
-    on a fresh deploy where no admin exists yet and there's no DB shell
-    access. Protected by a secret (not a real auth token) since this
-    bypasses normal permission checks. DELETE THIS after using it once."""
-    email = payload.get("email")
-    secret = payload.get("secret")
-
-    if not settings.admin_promote_secret or secret != settings.admin_promote_secret:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid secret")
-
-    result = await db.execute(select(User).where(User.email == email))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-
-    user.role = UserRole.ADMIN
-    await db.commit()
-    return {"status": "ok", "email": user.email, "role": user.role.value}

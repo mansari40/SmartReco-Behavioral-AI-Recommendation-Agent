@@ -12,7 +12,10 @@ import tempfile
 import uuid
 
 TEST_DIR = tempfile.mkdtemp(prefix="smartreco-test-")
-os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{TEST_DIR}/test.db"
+# setdefault so CI/locally the suite can be pointed at a real PostgreSQL +
+# pgvector database (DATABASE_URL=postgresql+asyncpg://... pytest) — with
+# SQLite (the default) the Chroma fallback vector store is used instead.
+os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{TEST_DIR}/test.db")
 os.environ["CHROMA_PERSIST_DIR"] = f"{TEST_DIR}/chroma"
 os.environ["MOCK_EMBEDDINGS"] = "true"
 os.environ["SECRET_KEY"] = "test-secret-key"
@@ -107,7 +110,7 @@ async def _isolated_db():
 
     async with AsyncSessionLocal() as db:
         for table in ("events", "recommendations", "user_cognitive_models",
-                      "llm_call_logs", "products", "users"):
+                      "llm_call_logs", "products", "users", "course_embeddings"):
             await db.execute(text(f"DELETE FROM {table}"))
         await db.commit()
     yield

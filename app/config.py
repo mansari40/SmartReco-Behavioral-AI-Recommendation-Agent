@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     # Auth
     secret_key: str = "dev-only-insecure-key"
     access_token_expire_minutes: int = 60 * 24
-    admin_promote_secret: str = Field(default="", env="ADMIN_PROMOTE_SECRET")
+
+    # Admin bootstrap — the single intended admin account, auto-created
+    # idempotently at startup (never hardcoded in source).
+    admin_email: str = Field(default="upulse@admin.com", env="ADMIN_EMAIL")
+    admin_password: str = Field(default="", env="ADMIN_PASSWORD")
 
     # LLM gateway (OpenRouter local/dev). Keep the provider/model configurable.
     llm_api_key: str = Field(default="", env="OPENROUTER_API_KEY")

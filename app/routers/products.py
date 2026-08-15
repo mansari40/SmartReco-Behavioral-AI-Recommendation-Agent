@@ -15,30 +15,11 @@ from app.db.session import get_db
 from app.models.product import Product, SyncStatus
 from app.routers.deps import require_admin
 from app.schemas.product import ProductCreate, ProductOut, ProductUpdate
-from app.services import llm_client, vector_store
+from app.services import vector_store
 from app.services.catalog_meta import infer_level, seed_rating
+from app.services.seeder import sync_product_to_vector_store
 
 router = APIRouter(prefix="/api/products", tags=["products"])
-
-
-async def _sync_to_vector_store(product: Product) -> tuple[SyncStatus, str | None]:
-    try:
-        embedding = await llm_client.get_embedding(product.to_embedding_text())
-        await vector_store.upsert_product(
-            vector_id=product.vector_id,
-            embedding=embedding,
-            document=product.to_embedding_text(),
-            metadata={
-                "category": product.category,
-                "price": product.price,
-                "sql_id": product.id,
-                "level": product.level,
-                "rating": product.rating,
-            },
-        )
-        return SyncStatus.SYNCED, None
-    except Exception as exc:  # noqa: BLE001 — deliberately broad: any failure must surface, not vanish
-        return SyncStatus.FAILED, str(exc)
 
 
 def _apply_store_metadata(product: Product, title_changed: bool = True) -> None:
@@ -60,7 +41,7 @@ async def create_product(
     await db.flush()  # get product.id before the vector-store call, without committing yet
     _apply_store_metadata(product)
 
-    product.sync_status, product.sync_error = await _sync_to_vector_store(product)
+    product.sync_status, product.sync_error = await sync_product_to_vector_store(product)
 
     await db.commit()
     await db.refresh(product)
@@ -100,7 +81,7 @@ async def update_product(
     product.sync_error = None
 
     # Re-embed on any edit — the text representation may have changed.
-    product.sync_status, product.sync_error = await _sync_to_vector_store(product)
+    product.sync_status, product.sync_error = await sync_product_to_vector_store(product)
 
     await db.commit()
     await db.refresh(product)
