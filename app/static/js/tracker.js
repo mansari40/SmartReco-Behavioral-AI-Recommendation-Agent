@@ -296,17 +296,36 @@
     // CHECKOUT / PURCHASE INTENT
     // ------------------------------------------------------------
 
+    /**
+     * Records ONE checkout_start event for the whole checkout action, no
+     * matter how many courses are in the cart. The checked-out product IDs
+     * are carried in event_metadata (product_ids) because an event row has
+     * a single product_id column — with several courses there is no single
+     * id to attribute it to.
+     *
+     * @param {string|string[]} productIds  one id, or the full cart's ids
+     * @param {object} [metadata]           extra metadata (e.g. { total })
+     */
     function trackCheckout(
-        productId,
-        title
+        productIds,
+        metadata
     ) {
+        const ids = Array.isArray(productIds)
+            ? productIds
+            : productIds
+                ? [productIds]
+                : [];
+
         queueEvent(
             'checkout_start',
-            productId,
-            {
-                title:
-                    title || 'Course',
-            }
+            null,
+            Object.assign(
+                {
+                    product_ids: ids,
+                    count: ids.length,
+                },
+                metadata || {}
+            )
         );
 
         // Checkout intent is high-intent, so send it immediately.
@@ -382,8 +401,13 @@
                 return {
                     label: 'Checkout',
                     detail:
-                        meta.title ||
-                        'Course',
+                        meta.product_ids && meta.product_ids.length
+                            ? meta.product_ids.length +
+                              (meta.product_ids.length === 1 ? ' course' : ' courses') +
+                              (meta.total
+                                  ? ' · $' + Number(meta.total).toFixed(2)
+                                  : '')
+                            : meta.title || 'Course',
                 };
 
             case 'time_spent':

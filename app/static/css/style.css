@@ -1303,21 +1303,32 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .cart-level { margin-left: 0.4rem; }
 .cart-side { display: flex; flex-direction: column; align-items: flex-end; gap: 0.7rem; flex-shrink: 0; }
 .cart-price { font-weight: 700; font-size: 1.05rem; }
-.cart-remove {
+
+.cart-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
+.cart-action-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   background: none;
-  border: none;
+  border: 1px solid var(--border);
   color: var(--fog);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 500;
   cursor: pointer;
-  padding: 0.3rem 0.4rem;
+  padding: 0.3rem 0.55rem;
   border-radius: 8px;
-  transition: color 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.cart-remove:hover { color: var(--danger); }
+.cart-action-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(86, 36, 208, 0.06);
+}
+.cart-action-btn.cart-remove:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(220, 38, 38, 0.06);
+}
 
 .cart-summary {
   position: sticky;
@@ -1345,6 +1356,35 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   padding-top: 0.9rem;
 }
 .cart-summary .btn { margin-top: 1rem; }
+.cart-notice {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg, var(--surface));
+  padding: 0.8rem 1rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--fog);
+}
+.cart-notice[hidden] { display: none; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 2rem;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.6rem 1.15rem;
+  border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  z-index: 60;
+  max-width: min(90vw, 480px);
+  text-align: center;
+}
+.toast[hidden] { display: none; }
 
 /* --- Footer --- */
 .site-footer {
@@ -1439,3 +1479,64 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .site-footer { padding: 1.75rem 1rem 2rem; flex-direction: column; }
   .footer-meta { padding-top: 0; }
 }
+
+/* ==========================================================
+   Admin console (Overview / Users / Observability)
+   ========================================================== */
+.admin-page { max-width: 1080px; }
+.admin-hero { margin-bottom: 2rem; }
+.admin-section { margin: 2.5rem 0 1.1rem; }
+.admin-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 2.5rem 0 1.1rem;
+}
+.admin-section-head h2 { font-size: 1.2rem; }
+.admin-section-head .hint { font-size: 0.82rem; color: var(--fog); }
+
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.admin-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fog);
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.admin-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.admin-table tbody tr:last-child td { border-bottom: none; }
+.admin-table tbody tr.clickable { cursor: pointer; }
+.admin-table tbody tr.clickable:hover { background: var(--surface-hover); }
+.admin-table .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.admin-table .muted-cell { color: var(--fog); font-size: 0.84rem; }
+
+.admin-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.admin-ok { color: #047857; }
+.admin-fail { color: var(--danger); }
+.admin-pending { color: var(--amber); }
+.admin-metric-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fog);
+}
+.admin-run-details { margin-top: 0.5rem; }
+.admin-run-details summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+.admin-kv { font-size: 0.86rem; }
+.admin-kv dt { color: var(--fog); font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.admin-kv dd { margin: 0 0 0.7rem; }

@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 
 {% block title %}Your Cart — UPulse{% endblock %}
-{% block main_class %}wide{% endblock %}
 
 {% block content %}
 <div style="margin-bottom: 2rem;">
@@ -15,6 +14,8 @@
         <div class="skeleton skeleton-card"></div>
     </div>
 </div>
+
+<div id="cart-toast" class="toast" role="status" hidden></div>
 
 <script src="/static/js/tracker.js"></script>
 <script>
@@ -66,20 +67,30 @@
         }
     }
 
+    function showToast(message) {
+        const toast = document.getElementById('cart-toast');
+        if (!toast) return;
+        toast.textContent = message;
+        toast.hidden = false;
+        clearTimeout(showToast._timer);
+        showToast._timer = setTimeout(function () { toast.hidden = true; }, 2200);
+    }
+
     function renderEmpty() {
         container.innerHTML = '<div class="rec-empty reveal">' +
             '<h3>Your cart is empty</h3>' +
             '<p>Courses you add will show up here with a total, ready for checkout.</p>' +
-            '<a class="btn" href="/">Explore the catalog</a>' +
+            '<a class="btn" href="/">Explore Courses</a>' +
             '</div>';
         reveal(container.firstElementChild);
     }
 
     function renderCart(products) {
-        const total = products.reduce(function (sum, p) { return sum + p.price; }, 0);
+        const subtotal = products.reduce(function (sum, p) { return sum + p.price; }, 0);
+        const count = products.length;
 
         let rows = products.map(function (p, i) {
-            return '<div class="cart-row reveal" data-product-id="' + p.id + '">' +
+            return '<div class="cart-row" data-product-id="' + p.id + '">' +
                 '<a href="/products/' + encodeURIComponent(p.id) + '" class="cart-cover cover cover-' + coverIndex(p.category) + '">' +
                 '<span class="cover-badge">' + escapeHtml((p.level || 'Intermediate')) + '</span>' +
                 '<span class="cover-glyph" style="width: 32px; height: 32px;">' + glyphFor(p.category) + '</span>' +
@@ -95,10 +106,16 @@
                 '</div>' +
                 '<div class="cart-side">' +
                 '<span class="cart-price">$' + p.price.toFixed(2) + '</span>' +
-                '<button class="cart-remove" data-id="' + p.id + '" aria-label="Remove ' + escapeHtml(p.title) + '">' +
-                '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>' +
+                '<div class="cart-actions">' +
+                '<button class="cart-action-btn cart-wishlist" data-id="' + p.id + '" aria-label="Move ' + escapeHtml(p.title) + ' to wishlist">' +
+                '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>' +
+                '<span>Move to Wishlist</span>' +
+                '</button>' +
+                '<button class="cart-action-btn cart-remove" data-id="' + p.id + '" aria-label="Remove ' + escapeHtml(p.title) + ' from cart">' +
+                '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>' +
                 '<span>Remove</span>' +
                 '</button>' +
+                '</div>' +
                 '</div>' +
                 '</div>';
         }).join('');
@@ -106,12 +123,13 @@
         container.innerHTML =
             '<div class="cart-layout">' +
             '<div class="cart-items">' + rows + '</div>' +
-            '<div class="cart-summary reveal">' +
-            '<h3>Summary</h3>' +
-            '<div class="cart-summary-row"><span>' + products.length + (products.length === 1 ? ' course' : ' courses') + '</span><span>$' + total.toFixed(2) + '</span></div>' +
-            '<div class="cart-summary-row cart-summary-total"><span>Total</span><span>$' + total.toFixed(2) + '</span></div>' +
-            '<button class="btn btn-dark" id="pay-btn" style="width: 100%; text-align: center;">Pay $' + total.toFixed(2) + '</button>' +
-            '<p class="muted" style="font-size: 0.75rem; text-align: center; margin-top: 0.6rem;">Demo checkout — no payment is taken.</p>' +
+            '<div class="cart-summary">' +
+            '<h3>Order summary</h3>' +
+            '<div class="cart-summary-row"><span>' + count + (count === 1 ? ' course' : ' courses') + '</span><span>$' + subtotal.toFixed(2) + '</span></div>' +
+            '<div class="cart-summary-row"><span>Subtotal</span><span>$' + subtotal.toFixed(2) + '</span></div>' +
+            '<div class="cart-summary-row cart-summary-total"><span>Total</span><span>$' + subtotal.toFixed(2) + '</span></div>' +
+            '<button class="btn btn-dark" id="checkout-btn" style="width: 100%; text-align: center;">Proceed to Checkout</button>' +
+            '<div class="cart-notice" id="checkout-notice" role="status" hidden></div>' +
             '</div>' +
             '</div>';
 
@@ -120,6 +138,9 @@
     }
 
     function attachHandlers(products) {
+        const byId = {};
+        products.forEach(function (p) { byId[p.id] = p; });
+
         container.querySelectorAll('.cart-remove').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 window.UPulseCart.remove(btn.dataset.id);
@@ -127,57 +148,91 @@
             });
         });
 
-        const payBtn = document.getElementById('pay-btn');
-        if (payBtn) {
-            payBtn.addEventListener('click', function () {
-            if (window.UPulseTracker && token) {
-                products.forEach(function (p) {
-                    window.UPulseTracker.trackCheckout(p.id, p.title);
-                });
-            }
-                payBtn.disabled = true;
-                payBtn.textContent = 'Processing...';
-            const total = products.reduce(function (s, p) { return s + p.price; }, 0);
-            setTimeout(function () {
-                window.UPulseCart.clear();
-                container.innerHTML = '<div class="rec-empty reveal">' +
-                    '<h3>Order complete</h3>' +
-                    '<p>This was a demo checkout — your cart has been cleared and the purchase intent was recorded.</p>' +
-                    '<a class="btn" href="/">Back to catalog</a>' +
-                    '</div>';
-                if (window.Motion && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-                    window.Motion.animate(container.firstElementChild, { opacity: [0, 1], y: [10, 0] }, { duration: 0.3, easing: 'ease-out' });
+        container.querySelectorAll('.cart-wishlist').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (window.UPulseWishlist) window.UPulseWishlist.add(btn.dataset.id);
+                window.UPulseCart.remove(btn.dataset.id);
+                const p = byId[btn.dataset.id];
+                showToast('Moved "' + (p ? p.title : 'course') + '" to wishlist');
+                loadCart();
+            });
+        });
+
+        const checkoutBtn = document.getElementById('checkout-btn');
+        if (checkoutBtn) {
+            checkoutBtn.addEventListener('click', function () {
+                const ids = products.map(function (p) { return p.id; });
+                const subtotal = products.reduce(function (sum, p) { return sum + p.price; }, 0);
+
+                // ONE checkout_start per checkout initiation, with the full
+                // set of checked-out product IDs in the metadata. The cart is
+                // NOT cleared and no purchase event is emitted — this build
+                // has no payment processing.
+                if (window.UPulseTracker && token) {
+                    window.UPulseTracker.trackCheckout(ids, { total: subtotal });
                 }
-            }, 1200);
+
+                checkoutBtn.disabled = true;
+                checkoutBtn.textContent = 'Checkout initiated';
+                const notice = document.getElementById('checkout-notice');
+                notice.textContent = 'Checkout flow started. This demo build has no payment ' +
+                    'processing, so nothing was charged and your cart is unchanged.';
+                notice.hidden = false;
             });
         }
     }
 
     async function loadCart() {
+        console.log('[CART DEBUG] loadCart entered');
         const ids = window.UPulseCart.get();
+        console.log('[CART DEBUG] IDs:', JSON.stringify(ids));
         if (ids.length === 0) {
+            console.log('[CART DEBUG] no IDs -> renderEmpty');
             renderEmpty();
             return;
         }
         try {
+            console.log('[CART DEBUG] fetching /api/products');
             const res = await fetch('/api/products');
+            console.log('[CART DEBUG] /api/products status:', res.status);
             const all = await res.json();
+            console.log('[CART DEBUG] products received:', all.length);
             const byId = {};
             all.forEach(function (p) { byId[p.id] = p; });
             const products = ids.map(function (id) { return byId[id]; }).filter(Boolean);
+            console.log('[CART DEBUG] matched products:', products.length);
             if (products.length === 0) {
                 window.UPulseCart.clear();
                 renderEmpty();
                 return;
             }
+            console.log('[CART DEBUG] rendering cart');
             renderCart(products);
+            console.log('[CART DEBUG] render done');
         } catch (err) {
+            console.error('[CART DEBUG] loadCart failed:', err);
             renderEmpty();
         }
     }
 
     window.addEventListener('upulse-cart', loadCart);
-    loadCart();
+
+    function boot() {
+        console.log('[CART DEBUG] boot');
+        if (window.UPulseCart) {
+            console.log('[CART DEBUG] UPulseCart present');
+            loadCart();
+            return;
+        }
+        console.error('[CART DEBUG] UPulseCart MISSING');
+        console.error('UPulseCart unavailable — cart.js did not load before the page script ran');
+        renderEmpty();
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
 })();
 </script>
 {% endblock %}

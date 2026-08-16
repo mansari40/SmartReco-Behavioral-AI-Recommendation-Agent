@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Observability — UPulse Admin{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <div class="admin-hero">
+        <span class="eyebrow">Admin · Observability</span>
+        <h1 style="font-size: 2rem; margin-bottom: 0.4rem;">Observability</h1>
+        <p class="muted">Every LLM/embedding call the app has made, grouped into pipeline runs by time. Rows come straight from the call log — an agent run is a cluster of its LLM calls (the run-trigger cooldown keeps runs of the same user well apart).</p>
+    </div>
+
+    <div id="top-stats" class="panel-dark" style="margin-bottom: 2.5rem;">
+        <span class="eyebrow">LLM call log · last 24h</span>
+        <h2>Pipeline load</h2>
+        <div class="panel-grid">
+            <div class="stat"><h4>Checking access...</h4><p>loading</p></div>
+        </div>
+    </div>
+
+    <div class="section-head" style="margin-top: 0;">
+        <div>
+            <span class="eyebrow">Runs</span>
+            <h2>Agent runs</h2>
+        </div>
+    </div>
+    <div id="runs" class="card" style="margin-bottom: 2.5rem;"><p class="muted">loading...</p></div>
+
+    <div class="section-head">
+        <div>
+            <span class="eyebrow">Models</span>
+            <h2>Model breakdown</h2>
+        </div>
+    </div>
+    <div id="models" class="card" style="margin-bottom: 2.5rem;"><p class="muted">loading...</p></div>
+
+    <div class="section-head">
+        <div>
+            <span class="eyebrow">Calls</span>
+            <h2>Recent calls</h2>
+        </div>
+    </div>
+    <div id="calls" class="card" style="margin-bottom: 2rem;"><p class="muted">loading...</p></div>
+</div>
+
+<script>
+(function () {
+    const token = localStorage.getItem('access_token');
+    const role = localStorage.getItem('user_role');
+    const topStats = document.getElementById('top-stats');
+    const runs = document.getElementById('runs');
+    const models = document.getElementById('models');
+    const calls = document.getElementById('calls');
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function money(v) {
+        const n = Number(v) || 0;
+        if (n === 0) return '$0';
+        return '$' + n.toFixed(4).replace(/0+$/, '');
+    }
+
+    function stat(label, value, sublabel) {
+        return '<div class="stat">' +
+            '<h4>' + escapeHtml(label) + '</h4>' +
+            '<div style="font-family: var(--font-display); font-size: 1.85rem; font-weight: 600; color: #fff; margin: 0.1rem 0 0.25rem;">' + value + '</div>' +
+            '<p>' + (sublabel ? escapeHtml(sublabel) : '&nbsp;') + '</p>' +
+            '</div>';
+    }
+
+    function renderTopStats(d) {
+        topStats.querySelector('.panel-grid').innerHTML =
+            stat('Calls (24h)', d.calls_24h,
+                d.real_calls_24h + ' real · ' + d.mock_calls_24h + ' mock') +
+            stat('Avg Latency', d.avg_latency_ms_24h + 'ms', 'per call') +
+            stat('Success Rate', Math.round(d.success_rate_24h * 100) + '%', 'of ' + d.calls_24h + ' calls') +
+            stat('Tokens', d.total_tokens_24h, 'prompt + completion') +
+            stat('Est. Cost', money(d.estimated_cost_usd_24h), 'blended rate estimate') +
+            stat('Models Used', Object.keys(d.model_breakdown).length, 'this window');
+    }
+
+    function renderRuns(d) {
+        if (!d.runs.length) {
+            runs.innerHTML = '<p class="muted" style="margin: 0;">No agent runs in the last 24h — browsing the catalog past the trigger thresholds generates runs.</p>';
+            return;
+        }
+        let html = '<table class="admin-table"><thead><tr>' +
+            '<th>Start</th><th class="num">Duration</th><th class="num">LLM calls</th>' +
+            '<th class="num">Tokens</th><th>Est. cost</th><th>Status</th><th>Result</th></tr></thead><tbody>';
+
+        d.runs.forEach(function (r) {
+            const callsText = r.chat_calls + ' chat · ' + r.embedding_calls + ' embed';
+            const status = r.success
+                ? '<span class="admin-ok">ok</span>'
+                : '<span class="admin-fail">degraded</span>';
+            let result = '<span class="muted-cell">no rec stored</span>';
+            if (r.recommendation) {
+                result = '<span class="admin-ok" title="' + escapeHtml(r.recommendation.trigger_reason) + '">' +
+                    'rec → ' + escapeHtml(r.recommendation.user_email) + ' (' + r.recommendation.product_count + ' products)' +
+                    '</span>';
+            }
+            let details = '<details class="admin-run-details"><summary>Details</summary><dl class="admin-kv" style="margin: 0.6rem 0 0.2rem;">' +
+                '<dt>Start</dt><dd>' + escapeHtml(new Date(r.start_time).toLocaleString()) + '</dd>' +
+                '<dt>Models</dt><dd>' + (r.models.map(escapeHtml).join(', ') || '—') + '</dd>' +
+                (r.recommendation
+                    ? '<dt>Recommendation</dt><dd>' + escapeHtml(r.recommendation.trigger_reason) +
+                      ' · ' + escapeHtml(r.recommendation.persuasion_strategy || 'no strategy') +
+                      ' · confidence ' + Number(r.recommendation.confidence).toFixed(2) + '</dd>'
+                    : '') +
+                (r.error ? '<dt>Error</dt><dd class="admin-fail">' + escapeHtml(r.error) + '</dd>' : '') +
+                '</dl></details>';
+
+            html += '<tr>' +
+                '<td class="num muted-cell">' + escapeHtml(new Date(r.start_time).toLocaleString()) + '</td>' +
+                '<td class="num">' + r.duration_seconds + 's</td>' +
+                '<td class="num">' + r.llm_calls + ' <span class="muted-cell">(' + escapeHtml(callsText) + ')</span></td>' +
+                '<td class="num">' + r.total_tokens + '</td>' +
+                '<td class="num">' + money(r.estimated_cost_usd) + '</td>' +
+                '<td>' + status + '</td>' +
+                '<td>' + result + details + '</td>' +
+                '</tr>';
+        });
+
+        html += '</tbody></table>';
+        runs.innerHTML = html;
+    }
+
+    function renderModels(d) {
+        const entries = Object.entries(d.model_breakdown);
+        if (!entries.length) {
+            models.innerHTML = '<p class="muted" style="margin: 0;">No calls in the last 24h.</p>';
+            return;
+        }
+        const max = Math.max.apply(null, entries.map(function (e) { return e[1]; }));
+        models.innerHTML = entries.map(function (e) {
+            const width = Math.round((e[1] / max) * 100);
+            return '<div style="margin-bottom: 0.7rem;">' +
+                '<div style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.84rem;">' +
+                '<span>' + escapeHtml(e[0]) + '</span><span style="color: var(--accent);">' + e[1] + '</span></div>' +
+                '<div style="height: 6px; border-radius: 999px; background: var(--surface-hover); margin-top: 0.3rem;">' +
+                '<div style="height: 6px; border-radius: 999px; background: var(--accent); width: ' + width + '%;"></div>' +
+                '</div></div>';
+        }).join('');
+    }
+
+    function renderCalls(d) {
+        if (!d.recent_calls.length) {
+            calls.innerHTML = '<p class="muted" style="margin: 0;">No calls logged yet — browse the site to generate activity.</p>';
+            return;
+        }
+        let html = '<table class="admin-table"><thead><tr>' +
+            '<th>Time</th><th>Type</th><th>Model</th><th class="num">Latency</th>' +
+            '<th class="num">Tokens</th><th>Status</th></tr></thead><tbody>';
+        d.recent_calls.forEach(function (c) {
+            const statusColor = c.success ? 'admin-ok' : 'admin-fail';
+            const mockTag = c.is_mock ? ' <span class="admin-pending">[mock]</span>' : '';
+            html += '<tr>' +
+                '<td class="num muted-cell">' + escapeHtml(new Date(c.created_at).toLocaleTimeString()) + '</td>' +
+                '<td><span class="rec-chip" style="font-size: 0.78rem;">' + escapeHtml(c.call_type) + '</span></td>' +
+                '<td class="mono">' + escapeHtml(c.model) + mockTag + '</td>' +
+                '<td class="num">' + c.latency_ms + 'ms</td>' +
+                '<td class="num">' + (c.total_tokens != null ? c.total_tokens : '—') + '</td>' +
+                '<td class="' + statusColor + '">' + (c.success ? 'ok' : 'failed') + '</td>' +
+                '</tr>';
+            if (!c.success && c.error) {
+                html += '<tr><td></td><td colspan="5" class="muted-cell admin-fail">' + escapeHtml(c.error) + '</td></tr>';
+            }
+        });
+        html += '</tbody></table>';
+        calls.innerHTML = html;
+    }
+
+    async function load() {
+        try {
+            const res = await fetch('/api/admin/observability', {
+                headers: { 'Authorization': 'Bearer ' + token },
+            });
+            if (!res.ok) throw new Error('not authorized');
+            const d = await res.json();
+            renderTopStats(d);
+            renderRuns(d);
+            renderModels(d);
+            renderCalls(d);
+        } catch (err) {
+            topStats.innerHTML = '<p class="muted">Admin access required.</p>';
+        }
+    }
+
+    if (token && role === 'admin') load();
+    else topStats.innerHTML = '<p class="muted">Admin access required.</p>';
+})();
+</script>
+{% endblock %}

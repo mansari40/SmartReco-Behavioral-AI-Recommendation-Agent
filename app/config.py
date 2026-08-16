@@ -27,11 +27,11 @@ class Settings(BaseSettings):
     admin_password: str = Field(default="", env="ADMIN_PASSWORD")
 
     # LLM gateway (OpenRouter local/dev). Keep the provider/model configurable.
-    llm_api_key: str = Field(default="", env="OPENROUTER_API_KEY")
-    llm_base_url: str = Field(default="https://openrouter.ai/api/v1", env="OPENROUTER_BASE_URL")
-    llm_chat_model: str = Field(default="openrouter/free", env="OPENROUTER_MODEL")
-    llm_embedding_model: str = Field(default="openai/text-embedding-3-small", env="OPENROUTER_EMBEDDING_MODEL")
-    llm_max_tokens: int = Field(default=4096, env="OPENROUTER_MAX_TOKENS")
+    llm_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
+    llm_base_url: str = Field(default="https://openrouter.ai/api/v1", validation_alias="OPENROUTER_BASE_URL")
+    llm_chat_model: str = Field(default="openrouter/free", validation_alias="OPENROUTER_MODEL")
+    llm_embedding_model: str = Field(default="openai/text-embedding-3-small", validation_alias="OPENROUTER_EMBEDDING_MODEL")
+    llm_max_tokens: int = Field(default=4096, validation_alias="OPENROUTER_MAX_TOKENS")
 
     # Email / password reset
     smtp_host: str = Field(default="", env="SMTP_HOST")

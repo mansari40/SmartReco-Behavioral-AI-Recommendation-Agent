@@ -123,83 +123,18 @@
         html[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
         html[data-theme="dark"] .theme-toggle .icon-sun { display: inline-block; }
 
-        /* ---- Cart dropdown ---- */
-        .nav-cart-wrap { position: relative; display: inline-flex; }
-        button.nav-cart {
-            background: none;
-            border: none;
-            padding: 0;
-            cursor: pointer;
+        /* ---- Cart icon (links to the /cart page) ---- */
+        .nav-cart {
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             position: relative;
             color: inherit;
-        }
-        .cart-dropdown {
-            position: absolute;
-            top: calc(100% + 10px);
-            right: 0;
-            width: 320px;
-            max-height: 420px;
-            display: flex;
-            flex-direction: column;
-            background: var(--upulse-card-bg);
-            border: 1px solid var(--upulse-border);
-            border-radius: 12px;
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
-            overflow-y: auto;
-            z-index: 50;
-            padding: 0.5rem;
-        }
-        .cart-dropdown[hidden] { display: none; }
-        .cart-dropdown-header {
-            padding: 0.75rem 0.75rem 0.5rem;
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            color: var(--upulse-text-muted);
-            border-bottom: 1px solid var(--upulse-border);
-            margin-bottom: 0.25rem;
-        }
-        .cart-dropdown-empty {
-            padding: 1.25rem 0.75rem;
-            text-align: center;
-            color: var(--upulse-text-muted);
-            font-size: 0.875rem;
-        }
-        .cart-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.6rem 0.5rem;
+            text-decoration: none;
+            padding: 0.2rem;
             border-radius: 8px;
         }
-        .cart-item:hover { background: var(--upulse-bg-alt); }
-        .cart-item-info { flex: 1; min-width: 0; }
-        .cart-item-title {
-            font-size: 0.875rem;
-            font-weight: 600;
-            color: var(--upulse-text);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .cart-item-meta {
-            font-size: 0.75rem;
-            color: var(--upulse-text-muted);
-            margin-top: 0.1rem;
-        }
-        .cart-item-remove {
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--upulse-text-muted);
-            padding: 0.25rem;
-            display: inline-flex;
-            border-radius: 6px;
-        }
-        .cart-item-remove:hover { color: #dc2626; background: rgba(220, 38, 38, 0.08); }
+        .nav-cart:hover { color: var(--upulse-accent, var(--upulse-text)); }
         .cart-count {
             position: absolute;
             top: -6px;
@@ -218,6 +153,8 @@
         }
         .error { color: #dc2626; margin-bottom: 1rem; }
     </style>
+    <script src="/static/js/cart.js"></script>
+    <script src="/static/js/wishlist.js"></script>
 </head>
 <body>
     <nav>
@@ -235,16 +172,10 @@
                 <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
                 <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
             </button>
-            <div class="nav-cart-wrap">
-                <button type="button" class="nav-cart" id="nav-cart" aria-label="Cart">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-                    <span class="cart-count" id="cart-count"></span>
-                </button>
-                <div class="cart-dropdown" id="cart-dropdown" hidden>
-                    <div class="cart-dropdown-header">Your cart</div>
-                    <div id="cart-dropdown-items"></div>
-                </div>
-            </div>
+            <a class="nav-cart" href="/cart" aria-label="Cart">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+                <span class="cart-count" id="cart-count"></span>
+            </a>
             <a href="/register" class="nav-auth nav-auth-solid" id="nav-get-started">Get started</a>
             <a href="#" id="nav-auth-link" class="nav-auth">Login</a>
         </div>
@@ -271,6 +202,46 @@
     })();
 
     (function() {
+        // Role-aware top navigation. Admins see exactly the three admin
+        // sections (Overview / Users / Observability); everyone else keeps
+        // the storefront links. Default server markup stays the storefront,
+        // so this is purely an enhancement for the signed-in admin.
+        const navLinks = document.querySelector('.nav-links');
+        if (!navLinks) return;
+        const path = window.location.pathname;
+        const ADMIN_LINKS =
+            '<a href="/admin/overview" class="nav-link">Overview</a>' +
+            '<a href="/admin/users" class="nav-link">Users</a>' +
+            '<a href="/admin/observability" class="nav-link">Observability</a>';
+
+        function markActive() {
+            navLinks.querySelectorAll('.nav-link').forEach(function (a) {
+                if (path === a.getAttribute('href')) a.setAttribute('aria-current', 'page');
+            });
+        }
+
+        function applyRole(role) {
+            if (role === 'admin') navLinks.innerHTML = ADMIN_LINKS;
+            markActive();
+        }
+
+        const role = localStorage.getItem('user_role');
+        const token = localStorage.getItem('access_token');
+        if (role === 'admin') { applyRole('admin'); return; }
+        if (token && !role) {
+            fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
+                .then(function (res) { return res.ok ? res.json() : null; })
+                .then(function (me) {
+                    if (me) localStorage.setItem('user_role', me.role);
+                    applyRole(me ? me.role : null);
+                })
+                .catch(function () { markActive(); });
+        } else {
+            markActive();
+        }
+    })();
+
+    (function() {
         const btn = document.getElementById('theme-toggle');
         const root = document.documentElement;
         const stored = localStorage.getItem('upulse_theme');
@@ -280,21 +251,6 @@
             if (isDark) root.removeAttribute('data-theme');
             else root.setAttribute('data-theme', 'dark');
             localStorage.setItem('upulse_theme', isDark ? 'light' : 'dark');
-        });
-    })();
-
-    (function() {
-        const wrap = document.querySelector('.nav-cart-wrap');
-        const dropdown = document.getElementById('cart-dropdown');
-        const btn = document.getElementById('nav-cart');
-        if (!wrap || !dropdown || !btn) return;
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dropdown.hidden = !dropdown.hidden;
-            if (!dropdown.hidden && window.UPulseCart) window.UPulseCart.renderDropdown();
-        });
-        document.addEventListener('click', (e) => {
-            if (!wrap.contains(e.target)) dropdown.hidden = true;
         });
     })();
 
@@ -394,6 +350,5 @@
     })();
     </script>
 
-    <script src="/static/js/cart.js"></script>
-</body>
+    </body>
 </html>

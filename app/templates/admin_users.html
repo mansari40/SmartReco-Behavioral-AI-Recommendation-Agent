@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}Users — UPulse Admin{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <div class="admin-hero">
+        <span class="eyebrow">Admin · Users</span>
+        <h1 style="font-size: 2rem; margin-bottom: 0.4rem;">Users</h1>
+        <p class="muted">Every account, with real behavioral activity and recommendation signal. Click a row for the full profile.</p>
+    </div>
+
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <input type="text" id="user-search" placeholder="Search by email or name…" style="width: 100%;">
+    </div>
+
+    <div class="card" style="padding: 0; overflow-x: auto;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Role</th>
+                    <th class="num">Events</th>
+                    <th class="num">Recs</th>
+                    <th>Last activity</th>
+                    <th>Decision stage</th>
+                    <th class="num">Readiness</th>
+                    <th>Price sens.</th>
+                    <th class="num">Feedback</th>
+                    <th>Active rec</th>
+                </tr>
+            </thead>
+            <tbody id="users-body">
+                <tr><td colspan="10" class="muted-cell">Loading users…</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <p class="muted" style="margin-top: 0.8rem;" id="users-count"></p>
+</div>
+
+<script>
+(function () {
+    const token = localStorage.getItem('access_token');
+    const role = localStorage.getItem('user_role');
+    const tbody = document.getElementById('users-body');
+    const search = document.getElementById('user-search');
+    const countEl = document.getElementById('users-count');
+    let allUsers = [];
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function ready(v) {
+        return v === 0 ? v : (Number(v) || 0);
+    }
+
+    function stageChip(stage) {
+        if (!stage) return '<span class="muted-cell">—</span>';
+        return '<span class="rec-chip" style="font-size: 0.78rem;">' + escapeHtml(stage) + '</span>';
+    }
+
+    function render() {
+        const q = search.value.trim().toLowerCase();
+        const rows = allUsers.filter(function (u) {
+            if (!q) return true;
+            return (u.email + ' ' + (u.first_name || '') + ' ' + (u.last_name || '')).toLowerCase().indexOf(q) !== -1;
+        });
+        countEl.textContent = rows.length + ' of ' + allUsers.length + ' users shown';
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="10" class="muted-cell">No users found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map(function (u) {
+            const name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+            const feedback = (u.feedback_up + u.feedback_down) > 0
+                ? '<span class="admin-ok">' + u.feedback_up + '↑</span> <span class="admin-fail">' + u.feedback_down + '↓</span>'
+                : '<span class="muted-cell">—</span>';
+            const last = u.last_event_at ? escapeHtml(new Date(u.last_event_at).toLocaleString()) : '<span class="muted-cell">never</span>';
+            const active = u.has_active_recommendation
+                ? '<span class="admin-ok" title="' + escapeHtml(u.active_trigger_reason || '') + '">active</span>'
+                : '<span class="muted-cell">—</span>';
+            return '<tr class="clickable" data-href="/admin/users/' + encodeURIComponent(u.id) + '">' +
+                '<td><div style="font-weight: 600;">' + escapeHtml(u.email) + '</div>' +
+                (name ? '<div class="muted-cell">' + escapeHtml(name) + '</div>' : '') + '</td>' +
+                '<td>' + escapeHtml(u.role) + '</td>' +
+                '<td class="num">' + u.events_count + '</td>' +
+                '<td class="num">' + u.recommendations_count + '</td>' +
+                '<td class="muted-cell">' + last + '</td>' +
+                '<td>' + stageChip(u.decision_stage) + '</td>' +
+                '<td class="num">' + ready(u.purchase_readiness).toFixed(2) + '</td>' +
+                '<td class="muted-cell">' + escapeHtml(u.price_sensitivity || '—') + '</td>' +
+                '<td class="num">' + feedback + '</td>' +
+                '<td>' + active + '</td>' +
+                '</tr>';
+        }).join('');
+
+        tbody.querySelectorAll('tr.clickable').forEach(function (tr) {
+            tr.addEventListener('click', function () { window.location.href = tr.dataset.href; });
+        });
+    }
+
+    async function load() {
+        try {
+            const res = await fetch('/api/admin/users', {
+                headers: { 'Authorization': 'Bearer ' + token },
+            });
+            if (!res.ok) throw new Error('not authorized');
+            const data = await res.json();
+            allUsers = data.items;
+            render();
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="10" class="muted-cell">Admin access required.</td></tr>';
+        }
+    }
+
+    if (search) search.addEventListener('input', render);
+    if (token && role === 'admin') load();
+    else tbody.innerHTML = '<tr><td colspan="10" class="muted-cell">Admin access required.</td></tr>';
+})();
+</script>
+{% endblock %}

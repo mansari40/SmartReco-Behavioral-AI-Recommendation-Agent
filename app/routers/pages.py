@@ -105,11 +105,28 @@ async def admin_page(request: Request, _admin=Depends(require_admin)):
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
+@router.get("/admin/overview")
+async def admin_overview_page(request: Request, _admin=Depends(require_admin)):
+    return templates.TemplateResponse("admin_overview.html", {"request": request})
+
+
+@router.get("/admin/users")
+async def admin_users_page(request: Request, _admin=Depends(require_admin)):
+    return templates.TemplateResponse("admin_users.html", {"request": request})
+
+
+@router.get("/admin/users/{user_id}")
+async def admin_user_detail_page(request: Request, user_id: str, _admin=Depends(require_admin)):
+    return templates.TemplateResponse(
+        "admin_user_detail.html", {"request": request, "user_id": user_id}
+    )
+
+
+@router.get("/admin/observability")
+async def admin_observability_page(request: Request, _admin=Depends(require_admin)):
+    return templates.TemplateResponse("admin_observability.html", {"request": request})
+
+
 @router.get("/cart")
 async def cart_page(request: Request):
     return templates.TemplateResponse("cart.html", {"request": request})
-
-
-@router.get("/console")
-async def console_page(request: Request, _admin=Depends(require_admin)):
-    return templates.TemplateResponse("console.html", {"request": request})

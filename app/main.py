@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import settings
 from app.db.base import init_db
-from app.routers import auth, console, events, pages, products, recommendations
+from app.routers import admin, auth, console, events, pages, products, recommendations
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.services.seeder import ensure_admin, seed_catalog
 
@@ -62,6 +62,7 @@ app.include_router(events.router)
 app.include_router(recommendations.router)
 app.include_router(pages.router)
 app.include_router(console.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

@@ -36,6 +36,12 @@ def _apply_store_metadata(product: Product, title_changed: bool = True) -> None:
 async def create_product(
     payload: ProductCreate, db: AsyncSession = Depends(get_db), _admin=Depends(require_admin)
 ):
+    clash = (
+        await db.execute(select(Product).where(Product.title == payload.title))
+    ).scalar_one_or_none()
+    if clash:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A product with this title already exists")
+
     product = Product(**payload.model_dump(), vector_id=str(uuid.uuid4()), sync_status=SyncStatus.PENDING)
     db.add(product)
     await db.flush()  # get product.id before the vector-store call, without committing yet
@@ -74,6 +80,14 @@ async def update_product(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Product not found")
 
     title_changed = "title" in payload.model_dump(exclude_unset=True)
+    if title_changed:
+        clash = (
+            await db.execute(
+                select(Product).where(Product.title == payload.title, Product.id != product_id)
+            )
+        ).scalar_one_or_none()
+        if clash:
+            raise HTTPException(status.HTTP_409_CONFLICT, "A product with this title already exists")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(product, field, value)
     _apply_store_metadata(product, title_changed=title_changed)

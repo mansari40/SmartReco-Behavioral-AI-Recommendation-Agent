@@ -12,6 +12,7 @@ import logging
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.db.session import AsyncSessionLocal
@@ -29,6 +30,36 @@ def _stable_vector_id(title: str) -> str:
     """Deterministic vector id derived from the course title, so restarts
     never produce a second vector entry for the same course."""
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"upulse-course/{title}"))
+
+
+async def _get_or_create_product(db, item: dict) -> tuple[Product, bool]:
+    """Title-keyed get-or-create. Tolerates legacy duplicate rows left behind
+    by pre-unique-index seeding (reuses the first row instead of crashing on
+    scalar_one()), and races from concurrent seeders once the unique title
+    index exists (savepoint + IntegrityError fallback). Returns the product
+    and whether this call created it."""
+    result = await db.execute(select(Product).where(Product.title == item["title"]))
+    rows = result.scalars().all()
+    if rows:
+        return rows[0], False
+
+    product = Product(
+        title=item["title"],
+        description=item["description"],
+        category=item["category"],
+        price=item["price"],
+        vector_id=_stable_vector_id(item["title"]),
+        sync_status=SyncStatus.PENDING,
+    )
+    try:
+        async with db.begin_nested():
+            db.add(product)
+            await db.flush()
+    except IntegrityError:
+        # Lost a concurrent-creation race — reuse the row the winner inserted.
+        result = await db.execute(select(Product).where(Product.title == item["title"]))
+        return result.scalars().first(), False
+    return product, True
 
 
 async def sync_product_to_vector_store(product: Product) -> tuple[SyncStatus, str | None]:
@@ -89,26 +120,9 @@ async def seed_catalog() -> dict:
     stats = {"total": len(CATALOG), "created": 0, "embedded": 0, "skipped": 0, "failed": 0}
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Product.title))
-        existing_titles = {row[0] for row in result.all()}
-
         for item in CATALOG:
-            if item["title"] in existing_titles:
-                product = (
-                    await db.execute(select(Product).where(Product.title == item["title"]))
-                ).scalar_one()
-            else:
-                product = Product(
-                    title=item["title"],
-                    description=item["description"],
-                    category=item["category"],
-                    price=item["price"],
-                    vector_id=_stable_vector_id(item["title"]),
-                    sync_status=SyncStatus.PENDING,
-                )
-                db.add(product)
-                await db.flush()
-                existing_titles.add(item["title"])
+            product, created = await _get_or_create_product(db, item)
+            if created:
                 stats["created"] += 1
 
             if product.level is None or product.rating is None:

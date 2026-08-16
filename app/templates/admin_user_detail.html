@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}User — UPulse Admin{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <div class="admin-hero">
+        <span class="eyebrow">Admin · User</span>
+        <h1 id="user-title" style="font-size: 2rem; margin-bottom: 0.4rem;">Loading…</h1>
+        <p class="muted" id="user-meta"></p>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.1rem;">
+            <a class="btn btn-outline" href="/admin/users">&larr; All users</a>
+        </div>
+    </div>
+
+    <div class="section-head" style="margin-top: 0;">
+        <div>
+            <span class="eyebrow">Behavioral model</span>
+            <h2>Cognitive profile</h2>
+        </div>
+    </div>
+    <div id="profile" class="card" style="margin-bottom: 2.5rem;"><p class="muted">loading...</p></div>
+
+    <div class="section-head">
+        <div>
+            <span class="eyebrow">Recency</span>
+            <h2>Recent events</h2>
+        </div>
+    </div>
+    <div id="events" class="card" style="margin-bottom: 2.5rem;"><p class="muted">loading...</p></div>
+
+    <div class="section-head">
+        <div>
+            <span class="eyebrow">Agent history</span>
+            <h2>Recommendations</h2>
+        </div>
+    </div>
+    <div id="recs" class="card" style="margin-bottom: 2rem;"><p class="muted">loading...</p></div>
+</div>
+
+<script>
+(function () {
+    const token = localStorage.getItem('access_token');
+    const role = localStorage.getItem('user_role');
+    const userId = {{ user_id|tojson }};
+    const profile = document.getElementById('profile');
+    const events = document.getElementById('events');
+    const recs = document.getElementById('recs');
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function chipList(items) {
+        if (!items || !items.length) return '<span class="muted">Not recorded</span>';
+        return items.map(function (i) { return '<span class="rec-chip" style="font-size: 0.8rem;">' + escapeHtml(i) + '</span>'; }).join('');
+    }
+
+    function renderProfile(p) {
+        if (!p) {
+            profile.innerHTML = '<p class="muted" style="margin: 0;">No behavioral model yet — the agent builds one once enough events have accumulated.</p>';
+            return;
+        }
+        let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem;">';
+
+        html += '<div><span class="admin-metric-label">Stage / readiness</span>' +
+            '<div style="display: flex; gap: 0.4rem; margin-top: 0.5rem;">' +
+            '<span class="rec-chip" style="font-size: 0.8rem;">' + escapeHtml(p.decision_stage) + '</span>' +
+            '<span class="rec-chip rec-chip-accent" style="font-size: 0.8rem;">readiness ' + Number(p.purchase_readiness).toFixed(2) + '</span>' +
+            '<span class="rec-chip" style="font-size: 0.8rem;">' + escapeHtml(p.price_sensitivity) + ' price</span>' +
+            '</div></div>';
+
+        html += '<div><span class="admin-metric-label">Stated intents</span><div class="admin-chips" style="margin-top: 0.5rem;">' + chipList(p.stated_intents) + '</div></div>';
+        html += '<div><span class="admin-metric-label">Inferred intents</span><div class="admin-chips" style="margin-top: 0.5rem;">' + chipList(p.inferred_intents) + '</div></div>';
+        html += '<div><span class="admin-metric-label">Detected objections</span><div class="admin-chips" style="margin-top: 0.5rem;">' + chipList(p.detected_objections) + '</div></div>';
+        html += '<div><span class="admin-metric-label">Brand affinity</span><div class="admin-chips" style="margin-top: 0.5rem;">' + chipList(p.brand_affinity) + '</div></div>';
+        html += '<div><span class="admin-metric-label">Category affinity</span><div class="admin-chips" style="margin-top: 0.5rem;">' + chipList(p.category_affinity) + '</div></div>';
+        html += '<div><span class="admin-metric-label">Recent searches</span><div class="admin-chips" style="margin-top: 0.5rem;">' + chipList(p.recent_searches) + '</div></div>';
+        html += '<div><span class="admin-metric-label">Recent categories</span><div class="admin-chips" style="margin-top: 0.5rem;">' + chipList(p.recent_categories) + '</div></div>';
+        html += '<div style="grid-column: 1 / -1;"><span class="admin-metric-label">Session arc</span>' +
+            '<p class="muted" style="margin: 0.5rem 0 0;">' + escapeHtml(p.session_arc || 'Not recorded') + '</p></div>';
+
+        html += '</div>';
+        profile.innerHTML = html;
+    }
+
+    function renderEvents(items) {
+        if (!items.length) {
+            events.innerHTML = '<p class="muted" style="margin: 0;">No behavioral events recorded.</p>';
+            return;
+        }
+        let html = '<table class="admin-table"><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>';
+        items.forEach(function (e) {
+            const product = e.product_title ? ' · ' + escapeHtml(e.product_title) : '';
+            html += '<tr><td class="num muted-cell">' + escapeHtml(new Date(e.created_at).toLocaleString()) + '</td>' +
+                '<td><span class="rec-chip" style="font-size: 0.78rem;">' + escapeHtml(e.event_type) + '</span></td>' +
+                '<td class="muted-cell">' + escapeHtml(e.summary) + product + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        events.innerHTML = html;
+    }
+
+    function renderRecs(items) {
+        if (!items.length) {
+            recs.innerHTML = '<p class="muted" style="margin: 0;">No recommendations yet — browsing past the trigger thresholds generates one.</p>';
+            return;
+        }
+        let html = '<table class="admin-table"><thead><tr><th>Time</th><th>Trigger</th><th class="num">Products</th><th>Confidence</th><th>Strategy</th><th>Feedback</th><th>Status</th></tr></thead><tbody>';
+        items.forEach(function (r) {
+            const fb = r.feedback === 'up' ? '<span class="admin-ok">up</span>'
+                : r.feedback === 'down' ? '<span class="admin-fail">down</span>' : '<span class="muted-cell">—</span>';
+            const status = r.is_active ? '<span class="admin-ok">active</span>' : '<span class="muted-cell">archived</span>';
+            html += '<tr>' +
+                '<td class="num muted-cell">' + escapeHtml(new Date(r.created_at).toLocaleString()) + '</td>' +
+                '<td class="muted-cell">' + escapeHtml(r.trigger_reason) + '</td>' +
+                '<td class="num">' + r.product_count + '</td>' +
+                '<td class="num">' + Number(r.confidence).toFixed(2) + '</td>' +
+                '<td class="muted-cell">' + escapeHtml(r.persuasion_strategy || '—') + '</td>' +
+                '<td class="num">' + fb + '</td>' +
+                '<td>' + status + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        recs.innerHTML = html;
+    }
+
+    async function load() {
+        try {
+            const res = await fetch('/api/admin/users/' + encodeURIComponent(userId), {
+                headers: { 'Authorization': 'Bearer ' + token },
+            });
+            if (!res.ok) throw new Error('not authorized');
+            const d = await res.json();
+            const name = [d.first_name, d.last_name].filter(Boolean).join(' ');
+            document.getElementById('user-title').textContent = d.email;
+            document.getElementById('user-meta').textContent =
+                (name ? name + ' · ' : '') + d.role + ' · ' + d.events_count + ' events · ' +
+                d.recommendations_count + ' recs · ' + d.feedback_up + '↑ ' + d.feedback_down + '↓';
+            renderProfile(d.cognitive_profile);
+            renderEvents(d.recent_events);
+            renderRecs(d.recommendations);
+        } catch (err) {
+            profile.innerHTML = '<p class="muted">Admin access required.</p>';
+            events.innerHTML = '';
+            recs.innerHTML = '';
+        }
+    }
+
+    if (token && role === 'admin') load();
+    else profile.innerHTML = '<p class="muted">Admin access required.</p>';
+})();
+</script>
+{% endblock %}

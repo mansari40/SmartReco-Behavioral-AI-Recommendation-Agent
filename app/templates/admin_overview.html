@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Overview — UPulse Admin{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <div class="admin-hero">
+        <span class="eyebrow">Admin · Overview</span>
+        <h1 style="font-size: 2rem; margin-bottom: 0.4rem;">UPulse Overview</h1>
+        <p class="muted">Real operational data, last 24h — nothing on this page is invented. Every number traces back to an actual row in the database or the LLM call log.</p>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.1rem;">
+            <a class="btn btn-outline" href="/admin">Manage catalog</a>
+        </div>
+    </div>
+
+    <div id="top-stats" class="panel-dark" style="margin-bottom: 2.5rem;">
+        <span class="eyebrow">Live operational data</span>
+        <h2>Everything at a glance</h2>
+        <div class="panel-grid">
+            <div class="stat"><h4>Checking access...</h4><p>loading</p></div>
+        </div>
+    </div>
+
+    <div class="section-head" style="margin-top: 0;">
+        <div>
+            <span class="eyebrow">Dual-write integrity</span>
+            <h2>Vector sync health</h2>
+        </div>
+    </div>
+    <div id="vector-sync" class="card" style="margin-bottom: 2.5rem;"><p class="muted">loading...</p></div>
+
+    <div class="section-head">
+        <div>
+            <span class="eyebrow">Behavioral intelligence</span>
+            <h2>Aggregate user profile</h2>
+        </div>
+    </div>
+    <div id="behavioral" class="card" style="margin-bottom: 2.5rem;"><p class="muted">loading...</p></div>
+
+    <div class="section-head">
+        <div>
+            <span class="eyebrow">Recency</span>
+            <h2>Live activity</h2>
+        </div>
+    </div>
+    <div id="activity" class="card" style="margin-bottom: 2rem;"><p class="muted">loading...</p></div>
+</div>
+
+<script>
+(function () {
+    const token = localStorage.getItem('access_token');
+    const role = localStorage.getItem('user_role');
+    const topStats = document.getElementById('top-stats');
+    const vectorSync = document.getElementById('vector-sync');
+    const behavioral = document.getElementById('behavioral');
+    const activity = document.getElementById('activity');
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function money(v) {
+        const n = Number(v) || 0;
+        if (n === 0) return '$0';
+        return '$' + n.toFixed(4).replace(/0+$/, '');
+    }
+
+    function stat(label, value, sublabel) {
+        return '<div class="stat">' +
+            '<h4>' + escapeHtml(label) + '</h4>' +
+            '<div style="font-family: var(--font-display); font-size: 1.85rem; font-weight: 600; color: #fff; margin: 0.1rem 0 0.25rem;">' + value + '</div>' +
+            '<p>' + (sublabel ? escapeHtml(sublabel) : '&nbsp;') + '</p>' +
+            '</div>';
+    }
+
+    function renderTopStats(d) {
+        const runs = d.agent_runs;
+        topStats.querySelector('.panel-grid').innerHTML =
+            stat('Agent Runs (24h)', runs.runs_24h,
+                'avg pipeline ' + runs.avg_pipeline_seconds + 's · ' + runs.runs_with_recommendation + ' stored a recommendation') +
+            stat('Total Users', d.total_users,
+                d.active_users_24h + ' active in last 24h') +
+            stat('Model Calls (24h)', d.model_calls_24h,
+                d.real_calls_24h + ' real · ' + d.mock_calls_24h + ' mock · ' + Math.round(d.success_rate_24h * 100) + '% success') +
+            stat('Avg Latency', d.avg_latency_ms_24h + 'ms', 'per LLM call') +
+            stat('Est. Cost (24h)', money(d.cost.estimated_usd), d.cost.total_tokens + ' tokens');
+    }
+
+    function syncChip(label, cls) {
+        const check = cls === 'ok'
+            ? '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+            : '<span aria-hidden="true">&middot;</span>';
+        return '<span class="sync-chip ' + cls + '">' + escapeHtml(label) + ' ' + check + '</span>';
+    }
+
+    function renderVectorSync(d) {
+        const v = d.vector_sync;
+        let html = '<div class="admin-chips" style="margin-bottom: 1rem;">' +
+            syncChip('SQL synced (' + v.total + ')', 'ok') +
+            syncChip('Vector synced (' + v.synced + ')', 'ok') +
+            syncChip('Vector pending (' + v.pending + ')', 'pending') +
+            syncChip('Vector failed (' + v.failed + ')', 'fail') +
+            '</div>';
+        if (v.sample_errors.length) {
+            html += '<table class="admin-table"><thead><tr><th>Product</th><th>Error</th></tr></thead><tbody>';
+            v.sample_errors.forEach(function (e) {
+                html += '<tr><td class="muted-cell">' + escapeHtml(e.title) + '</td>' +
+                    '<td class="muted-cell admin-fail">' + escapeHtml(e.error) + '</td></tr>';
+            });
+            html += '</tbody></table>';
+        } else {
+            html += '<p class="muted" style="margin-bottom: 0;">SQL and vector stores are fully in sync.</p>';
+        }
+        vectorSync.innerHTML = html;
+    }
+
+    function chipList(items) {
+        return items.map(function (item) {
+            return '<span class="rec-chip" style="font-size: 0.82rem;">' + escapeHtml(item.name) +
+                ' <b>' + item.count + '</b></span>';
+        }).join('');
+    }
+
+    function renderBehavioral(d) {
+        let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem;">';
+
+        html += '<div><span class="admin-metric-label">Decision stage</span>' +
+            '<div class="admin-chips" style="margin-top: 0.5rem;">';
+        const stages = Object.entries(d.decision_stage_distribution);
+        html += stages.length
+            ? stages.map(function (kv) { return '<span class="rec-chip" style="font-size: 0.82rem;">' + escapeHtml(kv[0]) + ' <b>' + kv[1] + '</b></span>'; }).join('')
+            : '<span class="muted">No models yet</span>';
+        html += '</div></div>';
+
+        html += '<div><span class="admin-metric-label">Price sensitivity</span>' +
+            '<div class="admin-chips" style="margin-top: 0.5rem;">';
+        const prices = Object.entries(d.price_sensitivity_distribution);
+        html += prices.length
+            ? prices.map(function (kv) { return '<span class="rec-chip" style="font-size: 0.82rem;">' + escapeHtml(kv[0]) + ' <b>' + kv[1] + '</b></span>'; }).join('')
+            : '<span class="muted">No models yet</span>';
+        html += '</div></div>';
+
+        html += '<div><span class="admin-metric-label">Avg purchase readiness</span>' +
+            '<div style="font-family: var(--font-display); font-size: 1.6rem; font-weight: 600; margin-top: 0.3rem;">' +
+            d.avg_purchase_readiness.toFixed(2) + '</div>' +
+            '<p class="muted" style="margin: 0;">across ' + d.cognitive_models_count + ' behavioral model' + (d.cognitive_models_count === 1 ? '' : 's') + '</p></div>';
+
+        html += '<div><span class="admin-metric-label">Top inferred intents</span>' +
+            '<div class="admin-chips" style="margin-top: 0.5rem;">' +
+            (d.top_inferred_intents.length ? chipList(d.top_inferred_intents) : '<span class="muted">No intents recorded</span>') +
+            '</div></div>';
+
+        html += '<div><span class="admin-metric-label">Top category affinity</span>' +
+            '<div class="admin-chips" style="margin-top: 0.5rem;">' +
+            (d.top_category_affinity.length ? chipList(d.top_category_affinity) : '<span class="muted">No affinity recorded</span>') +
+            '</div></div>';
+
+        html += '</div>';
+        behavioral.innerHTML = html;
+    }
+
+    function renderActivity(d) {
+        const items = d.recent_activity;
+        if (!items.length) {
+            activity.innerHTML = '<p class="muted" style="margin: 0;">No behavioral events in the last 24h — browsing the catalog generates them.</p>';
+            return;
+        }
+        let html = '<table class="admin-table"><thead><tr><th>Time</th><th>User</th><th>Event</th><th>Detail</th></tr></thead><tbody>';
+        items.forEach(function (e) {
+            const product = e.product_title ? ' · ' + escapeHtml(e.product_title) : '';
+            html += '<tr><td class="num muted-cell">' + escapeHtml(new Date(e.created_at).toLocaleString()) + '</td>' +
+                '<td>' + escapeHtml(e.user_email) + '</td>' +
+                '<td><span class="rec-chip" style="font-size: 0.78rem;">' + escapeHtml(e.event_type) + '</span></td>' +
+                '<td class="muted-cell">' + escapeHtml(e.summary) + product + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        activity.innerHTML = html;
+    }
+
+    async function load() {
+        try {
+            const res = await fetch('/api/admin/overview', {
+                headers: { 'Authorization': 'Bearer ' + token },
+            });
+            if (!res.ok) throw new Error('not authorized');
+            const d = await res.json();
+            renderTopStats(d);
+            renderVectorSync(d);
+            renderBehavioral(d);
+            renderActivity(d);
+        } catch (err) {
+            topStats.innerHTML = '<p class="muted">Admin access required.</p>';
+        }
+    }
+
+    if (token && role === 'admin') load();
+    else topStats.innerHTML = '<p class="muted">Admin access required.</p>';
+})();
+</script>
+{% endblock %}

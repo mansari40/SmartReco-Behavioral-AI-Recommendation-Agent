@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Enum, Float, String, Text
+from sqlalchemy import DateTime, Enum, Float, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,6 +18,10 @@ class SyncStatus(str, enum.Enum):
 
 class Product(Base):
     __tablename__ = "products"
+    # Title is the catalog's natural key: seed_catalog() and the admin API
+    # both key on it, and the migration enforces it on existing DBs with the
+    # same-named index (scripts/dedupe_catalog.py).
+    __table_args__ = (Index("uq_products_title", "title", unique=True),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
