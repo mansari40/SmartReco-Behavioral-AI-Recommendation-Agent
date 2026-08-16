@@ -12,6 +12,14 @@ from app.models.recommendation import Recommendation
 
 
 async def store_node(state: AgentState) -> dict:
+    recommended_products = state.get("recommended_products", [])
+
+    if not recommended_products:
+        # No valid candidates survived exclusions + relevance filtering.
+        # Keep the currently active recommendation — never overwrite a good
+        # recommendation with an empty one, and never invent a fallback.
+        return {}
+
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(Recommendation).where(

@@ -21,7 +21,8 @@ class AgentState(TypedDict, total=False):
 
     # populated by assess/retry nodes (deterministic adaptive retrieval)
     retrieval_quality: str  # "good" | "low" — deterministic quality decision
-    retrieval_adjusted: bool  # True if the filter-relaxing retry ran
+    retrieval_adjusted: bool  # True if a progressive filter-relaxing retry ran
+    retrieval_attempt: int  # 1 = newest category, 2 = recent categories, 3 = unfiltered (final)
 
     # populated by evaluate/filter nodes
     evaluated_candidates: list[dict]  # candidates scored against the cognitive model

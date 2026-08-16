@@ -9,11 +9,16 @@ import pytest
 
 from app.db.session import AsyncSessionLocal
 from app.models.event import Event, EventType
+from app.models.product import Product
 from app.models.recommendation import Recommendation
 from app.models.user import User
 from app.security import hash_password
+from app.services import vector_store
 from app.services.scheduler import run_daily_digest, _should_digest_user
 from sqlalchemy import select
+from tests.conftest import fake_embedding
+
+DIGEST_QUERY_TEXT = "Agentic AI Fundamentals. Category: AI. Build reasoning agents with LangGraph and RAG."
 
 
 async def _make_user() -> str:
@@ -41,7 +46,26 @@ async def _add_event(user_id: str, event_type: EventType, minutes_ago: int) -> N
 
 
 @pytest.mark.asyncio
-async def test_daily_digest_targets_only_recently_active_users(fake_llm):
+async def test_daily_digest_targets_only_recently_active_users(fake_llm, monkeypatch):
+    # a real catalog entry so a valid recommendation can be stored (the
+    # relevance floor is honored — the digest never writes empty sets)
+    async with AsyncSessionLocal() as db:
+        p = Product(title="Agentic AI Fundamentals",
+                    description="Build reasoning agents with LangGraph and RAG.",
+                    category="AI", price=49.99, vector_id=str(uuid.uuid4()))
+        db.add(p)
+        await db.flush()
+        await vector_store.upsert_product(
+            vector_id=p.vector_id, embedding=fake_embedding(p.to_embedding_text()),
+            document=p.to_embedding_text(),
+            metadata={"category": p.category, "price": p.price, "sql_id": p.id},
+        )
+        await db.commit()
+
+    # pin the query to the product's embedding text: deterministic self-match
+    from app.agent.nodes import retrieve as retrieve_mod
+    monkeypatch.setattr(retrieve_mod, "_build_query_text", lambda cm: DIGEST_QUERY_TEXT)
+
     async with AsyncSessionLocal() as db:
         active = User(email=f"active-{uuid.uuid4().hex[:8]}@test.com", hashed_password=hash_password("x"))
         stale = User(email=f"stale-{uuid.uuid4().hex[:8]}@test.com", hashed_password=hash_password("x"))

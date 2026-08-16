@@ -35,3 +35,29 @@ async def test_store_persists_and_deactivates_previous():
         assert active[0].trigger_reason == "test"
         assert active[0].products == [{"product_id": "p2", "reason": "r2"}]
         assert not [r for r in rows if r.narrative == "old"][0].is_active
+
+
+@pytest.mark.asyncio
+async def test_empty_result_keeps_previous_recommendation_active():
+    """A run with zero valid candidates must NOT overwrite a good existing
+    recommendation with an empty one — the old recommendation stays active
+    until a genuinely valid new set exists."""
+    async with AsyncSessionLocal() as db:
+        user = User(email="store-guard@test.com", hashed_password=hash_password("x"))
+        db.add(user)
+        await db.flush()
+        db.add(Recommendation(user_id=user.id, narrative="good-old", is_active=True,
+                              products=[{"product_id": "p1", "reason": "r"}]))
+        await db.commit()
+        user_id = user.id
+
+    await store_node({"user_id": user_id, "narrative": "fallback",
+                      "recommended_products": [],
+                      "persuasion_strategy": "none", "confidence": 0.0,
+                      "reasoning_chain": [], "alternatives_considered": []})
+
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Recommendation).where(Recommendation.user_id == user_id))).scalars().all()
+        assert len(rows) == 1  # no empty row was written
+        assert rows[0].is_active
+        assert rows[0].narrative == "good-old"  # previous recommendation preserved

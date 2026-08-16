@@ -34,8 +34,13 @@ already computed — an observable, bounded adjustment that adds no LLM calls.
 """
 from langgraph.graph import END, StateGraph
 from app.agent.nodes.model_user import model_user_node
+from app.agent.nodes.retrieve import (
+    MAX_RETRIEVAL_ATTEMPTS,
+    retrieve_node,
+    assess_retrieval_node,
+    retry_retrieve_node,
+)
 from app.agent.state import AgentState
-from app.agent.nodes.retrieve import retrieve_node, assess_retrieval_node, retry_retrieve_node
 from app.agent.nodes.evaluate import evaluate_node
 from app.agent.nodes.filter import filter_node
 from app.agent.nodes.generate import generate_node
@@ -47,11 +52,13 @@ MAX_REGENERATIONS = 2
 
 def _route_after_assess(state: AgentState) -> str:
     """Conditional edge: after the deterministic quality gate, either retry
-    with a relaxed filter (poor quality AND a filter was applied) or proceed
-    to evaluate. Bounded to a single retry via retrieval_adjusted."""
+    with the next progressive filter stage (newest category -> broader recent
+    categories -> unfiltered) or proceed to evaluate. Bounded to
+    MAX_RETRIEVAL_ATTEMPTS via retrieval_attempt — the final stage has no
+    filter, so the last assess always routes to evaluate."""
     if state.get("retrieval_quality") == "good":
         return "evaluate"
-    if state.get("retrieval_filter_applied") and not state.get("retrieval_adjusted"):
+    if state.get("retrieval_filter_applied") and state.get("retrieval_attempt", 1) < MAX_RETRIEVAL_ATTEMPTS:
         return "retry"
     return "evaluate"
 
@@ -83,7 +90,7 @@ def build_graph():
     graph.add_conditional_edges(
         "assess", _route_after_assess, {"evaluate": "evaluate", "retry": "retry"}
     )
-    graph.add_edge("retry", "evaluate")
+    graph.add_edge("retry", "assess")
     graph.add_edge("evaluate", "filter")
     graph.add_edge("filter", "generate")
     graph.add_edge("generate", "reflect")

@@ -22,6 +22,7 @@ from app.agent.state import AgentState
 from app.db.session import AsyncSessionLocal
 from app.models.product import Product
 from app.services import llm_client, vector_store
+from app.services.engagement_filter import get_excluded_product_ids
 
 TOP_K = 10
 # The vector store is queried with a larger pool than we actually keep, and
@@ -55,7 +56,10 @@ def _build_query_text(cognitive_model: dict) -> str:
 
     recent_categories = cognitive_model.get("recent_categories", [])
     if recent_categories:
-        parts.append("Recently viewing courses in: " + ", ".join(recent_categories))
+        # Newest interest leads the query (recent_categories is stored
+        # chronological, oldest first) so the embedding is dominated by what
+        # the user is engaging with RIGHT NOW, not their older interests.
+        parts.append("Recently viewing courses in: " + ", ".join(reversed(recent_categories)))
 
     arc = cognitive_model.get("session_arc", "")
     if arc:
@@ -72,14 +76,29 @@ def _build_query_text(cognitive_model: dict) -> str:
     return " ".join(p for p in parts if p)
 
 
-def _build_metadata_filter(cognitive_model: dict) -> dict | None:
-    """Hybrid retrieval: narrow the semantic search to categories the user
-    has actually shown affinity for. Recency wins — categories viewed in the
-    most recent activity constrain the search first; older category affinity
-    is a fallback, not the default. Falls back to no filter (pure semantic
-    search) if we don't yet know enough."""
+MAX_RETRIEVAL_ATTEMPTS = 3
+
+
+def _build_metadata_filter(cognitive_model: dict, attempt: int = 1) -> dict | None:
+    """Progressive recency-preserving metadata filter.
+
+    Attempt 1: the user's NEWEST category alone — the newest interest gets
+              the strongest influence.
+    Attempt 2: all recent categories ($in) — broader, still recency-bound.
+    Attempt 3: no filter — pure semantic search, final fallback only.
+
+    Falls back to accumulated category affinity (all attempts) for users
+    with no recent category signals. The user's historical dominant
+    interest must never override the newest one (DE must not drown out AI)."""
     recent_categories = cognitive_model.get("recent_categories", [])
-    if recent_categories:
+
+    if attempt >= MAX_RETRIEVAL_ATTEMPTS:
+        return None  # final stage is always unfiltered
+
+    if attempt == 1 and recent_categories:
+        return {"category": recent_categories[-1]}
+
+    if attempt == 2 and recent_categories:
         if len(recent_categories) == 1:
             return {"category": recent_categories[0]}
         return {"category": {"$in": recent_categories}}
@@ -130,6 +149,20 @@ async def _extract_candidates(raw_results: dict, limit: int = TOP_K) -> list[dic
     return candidates[:limit]
 
 
+async def _apply_exclusions(candidates: list[dict], user_id: str) -> list[dict]:
+    """Drop products the user has already engaged with — checked out, added
+    to cart, previously recommended, or viewed within the last 24 hours —
+    from the candidate pool. Applied on EVERY retrieval attempt (normal
+    filtered query and every retry), so re-served engaged courses can never
+    slip back in through the relaxed/unfiltered path."""
+    if not candidates:
+        return []
+    excluded = await get_excluded_product_ids(user_id)
+    if not excluded:
+        return candidates
+    return [c for c in candidates if c["product_id"] not in excluded]
+
+
 def _best_similarity(candidates: list[dict]) -> float:
     """Best cosine similarity across the candidates (1 - distance, clamped to
     [0, 1]). Candidates without a distance count as neutral 0.5, matching the
@@ -158,21 +191,24 @@ def _quality(candidates: list[dict]) -> str:
 
 async def retrieve_node(state: AgentState) -> dict:
     cognitive_model = state["cognitive_model"]
+    user_id = state["user_id"]
 
     query_text = _build_query_text(cognitive_model) or DEFAULT_QUERY_TEXT
     query_embedding = await llm_client.get_embedding(query_text)
 
-    where_filter = _build_metadata_filter(cognitive_model)
+    where_filter = _build_metadata_filter(cognitive_model, attempt=1)
     raw_results = await vector_store.query(
         embedding=query_embedding, top_k=TOP_K * RETRIEVAL_POOL_MARGIN, where=where_filter
     )
 
     candidates = await _extract_candidates(raw_results)
+    candidates = await _apply_exclusions(candidates, user_id)
 
     return {
         "retrieved_candidates": candidates,
         "query_embedding": query_embedding,
         "retrieval_filter_applied": where_filter is not None,
+        "retrieval_attempt": 1,
     }
 
 
@@ -184,16 +220,26 @@ async def assess_retrieval_node(state: AgentState) -> dict:
 
 
 async def retry_retrieve_node(state: AgentState) -> dict:
-    """Deterministic retrieval adjustment: when the metadata filter
-    over-constrained the search, re-query with NO filter, reusing the exact
-    embedding already computed by retrieve — zero extra embedding/chat calls."""
+    """Deterministic retrieval adjustment — progressive filter relaxation,
+    never a blind jump to unfiltered. attempt 1 -> 2 -> 3 (newest category
+    -> all recent categories -> unfiltered only as a final fallback), always
+    reusing the exact embedding already computed by retrieve (zero extra
+    embedding/chat calls) and re-applying the engaged-product exclusions."""
     query_embedding = state["query_embedding"]
+    current_attempt = state.get("retrieval_attempt", 1)
+    next_attempt = min(current_attempt + 1, MAX_RETRIEVAL_ATTEMPTS)
+
+    where_filter = _build_metadata_filter(state.get("cognitive_model", {}), attempt=next_attempt)
     raw_results = await vector_store.query(
-        embedding=query_embedding, top_k=TOP_K * RETRIEVAL_POOL_MARGIN, where=None
+        embedding=query_embedding, top_k=TOP_K * RETRIEVAL_POOL_MARGIN, where=where_filter
     )
     candidates = await _extract_candidates(raw_results)
+    candidates = await _apply_exclusions(candidates, state["user_id"])
+
     return {
         "retrieved_candidates": candidates,
         "retrieval_adjusted": True,
+        "retrieval_attempt": next_attempt,
+        "retrieval_filter_applied": where_filter is not None,
         "retrieval_quality": _quality(candidates),
     }
